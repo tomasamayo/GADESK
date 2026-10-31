@@ -83,7 +83,7 @@ components="$work_dir/components.plist"
 pkgbuild --analyze --root "$pkg_root" "$components"
 index=0
 while "$plist_buddy" -c "Print :$index:RootRelativeBundlePath" "$components" >/dev/null 2>&1; do
-    "$plist_buddy" -c "Set :$index:BundleIsRelocatable false" "$components"
+    plutil -replace "$index.BundleIsRelocatable" -bool false "$components"
     index=$((index + 1))
 done
 [[ $index -gt 0 ]] || fail 'pkgbuild did not identify the application bundle.'

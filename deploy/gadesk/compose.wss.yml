@@ -35,6 +35,8 @@ services:
       ALLOW_SHARED_NAT_INITIATOR: "Y"
       TRUST_PROXY: "Y"
       TRUSTED_PROXIES: ${GADESK_TRUSTED_PROXIES:?Run deploy-wss.sh to select the proxy gateway}
+      # The proxy shares an IP; 256 relay slots allow up to 128 concurrent sessions.
+      RELAY_MAX_CONNS_PER_IP: "256"
       CDAP_ENABLED: "N"
       MESH_ENABLED: "N"
     volumes:

@@ -48,3 +48,8 @@ restore the previous Nginx extension (or remove it if none existed), run
 Nginx's configuration test, and reload Nginx. Retain its private keys/database
 until the rollback has been verified. Restore the public configuration to the
 transport actually in use.
+
+The relay currently counts the shared Docker proxy IP, so its per-IP limit is
+explicitly 256 connections (up to 128 paired sessions across the deployment).
+Additional file-transfer or other sessions also consume slots. This is a finite
+global ceiling behind the proxy; review capacity before increasing it.

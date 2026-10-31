@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="es">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#071526">
+<title>GADESK · Descargas</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+*{box-sizing:border-box}body{margin:0;background:#071526;color:#eef6ff;font:16px/1.6 system-ui,sans-serif}main{max-width:1060px;margin:auto;padding:44px 24px}header{display:flex;align-items:center;gap:12px;font-size:22px;font-weight:750}header img{width:44px}header small{margin-left:auto;color:#92acc8;font-size:13px;font-weight:500}.intro{padding:70px 0 35px;max-width:700px}.eyebrow{color:#55cfff;font-size:13px;letter-spacing:.14em;font-weight:700}h1{font-size:clamp(34px,6vw,58px);line-height:1.1;letter-spacing:-.04em;margin:18px 0}p{color:#a9bdd2}.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}.card{background:#102339;border:1px solid #233e59;border-radius:18px;padding:25px;display:flex;flex-direction:column;min-height:255px}.card h2{margin:0;font-size:23px}.card p{font-size:14px;margin:9px 0 20px}.links{margin-top:auto;display:grid;gap:9px}a{color:#70d6ff}a.download{display:block;padding:10px 15px;border-radius:9px;background:#109ce0;color:#fff;text-decoration:none;font-weight:650;text-align:center}.pending{color:#92acc8;font-size:14px}.note{font-size:13px;margin-top:15px;color:#a9bdd2}.help{margin-top:38px;border-top:1px solid #233e59;padding-top:22px}footer{margin-top:38px;font-size:12px;color:#7894af}code{overflow-wrap:anywhere}@media(max-width:730px){.cards{grid-template-columns:1fr}.intro{padding-top:45px}header small{display:none}}
+</style>
+<main>
+<header><img src="icon.svg" alt=""><span>GADESK</span><small>GRUPO AMAYO · ACCESO REMOTO</small></header>
+<section class="intro"><span class="eyebrow">TU EQUIPO, DONDE LO NECESITES</span><h1>Conecta. Asiste.<br>Sigue trabajando.</h1><p>Descarga GADESK con el servidor de Grupo Amayo configurado. La conexión utiliza HTTPS para acceder desde distintas redes.</p></section>
+<section class="cards" aria-label="Descargas por plataforma">
+<article class="card"><h2>Android</h2><p>APK para dispositivos ARM64.</p><div class="links" id="android"><span class="pending">Compilación en preparación.</span></div></article>
+<article class="card"><h2>macOS</h2><p>Para Mac con Apple Silicon (M1 y posteriores).</p><div class="links" id="macos"><span class="pending">Paquete en preparación.</span></div><div class="note">Versión sin notarización de Apple. macOS puede solicitar autorización para abrirla.</div></article>
+<article class="card"><h2>Windows</h2><p>Instaladores para Windows de 64 bits (x64).</p><div class="links" id="windows"><span class="pending">Compilación en preparación.</span></div><div class="note">Instaladores sin firma de editor. Windows puede mostrar una advertencia.</div></article>
+</section>
+<section class="help"><h2>Empieza con GADESK</h2><p>Instala la aplicación en ambos equipos. Comparte tu ID únicamente con la persona que te dará asistencia y acepta la conexión cuando corresponda. En macOS, autoriza Grabación de pantalla y Accesibilidad para compartir y controlar la pantalla.</p><p><a href="https://github.com/tomasamayo/GADESK">Código fuente y licencia AGPL-3.0</a> · <a href="client-config.json">Configuración del servidor</a> · <a href="SHA256SUMS">Verificar descargas (SHA-256)</a></p></section>
+<footer>GADESK 1.5.1 · Basado en RustDesk. Conserva el cifrado de las sesiones entre los equipos.</footer>
+</main>
+<script>
+fetch('downloads.json',{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('manifest');return r.json()}).then(items=>{for(const platform of ['android','macos','windows']){const files=items.filter(x=>x.platform===platform);if(!files.length)continue;const container=document.getElementById(platform);container.replaceChildren();for(const f of files){const a=document.createElement('a');a.className='download';a.href=f.file;a.textContent=f.label+' · '+f.size_mb+' MB';a.download=f.file;container.append(a)}}}).catch(()=>{});
+</script>
+</html>
