@@ -1,0 +1,132 @@
+name: Build GADESK Windows x64
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/gadesk-deployment]
+    paths:
+      - .github/workflows/gadesk-windows.yml
+      - .github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff
+      - deploy/gadesk/build-windows.ps1
+      - Cargo.toml
+      - Cargo.lock
+      - build.rs
+      - build.py
+      - vcpkg.json
+      - src/**
+      - libs/**
+      - flutter/**
+      - res/**
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gadesk-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  RUST_VERSION: "1.75"
+  LLVM_VERSION: "15.0.6"
+  FLUTTER_VERSION: "3.24.5"
+  VCPKG_COMMIT_ID: "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
+  VCPKG_DEFAULT_TRIPLET: x64-windows-static
+  VCPKG_DEFAULT_HOST_TRIPLET: x64-windows-static
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Export cache environment
+        uses: actions/github-script@d7906e4ad0b1822421a7e6a35d5ca353c962f410 # v6
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - name: Restore verified bridge payload
+        shell: pwsh
+        run: |
+          $archive = 'res/gadesk/bridge-master.zip'
+          $expected = 'fa6ec4052a63fc378a59162cb3078b7035be275ea631fe3759b0bd6e6a10357b'
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) {
+            throw 'Bridge payload checksum does not match its recorded provenance.'
+          }
+          Expand-Archive $archive -DestinationPath . -Force
+
+      - name: Install LLVM
+        uses: KyleMayes/install-llvm-action@ebc0426251bc40c7cd31162802432c68818ab8f0 # v2.0.9
+        with:
+          version: ${{ env.LLVM_VERSION }}
+
+      - name: Install Flutter
+        id: flutter
+        uses: subosito/flutter-action@2783a3f08e1baf891508463f8c6653c258246225 # v2.12.0
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          architecture: x64
+
+      - name: Install RustDesk Windows engine
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          flutter precache --windows
+          Invoke-WebRequest https://github.com/rustdesk/engine/releases/download/main/windows-x64-release.zip -OutFile "$env:RUNNER_TEMP/windows-x64-release.zip"
+          Expand-Archive "$env:RUNNER_TEMP/windows-x64-release.zip" -DestinationPath "$env:RUNNER_TEMP/windows-x64-release"
+          Copy-Item "$env:RUNNER_TEMP/windows-x64-release/*" '${{ steps.flutter.outputs['CACHE-PATH'] }}/bin/cache/artifacts/engine/windows-x64-release/' -Recurse -Force
+
+      - name: Apply Flutter dropdown patch
+        shell: bash
+        run: git -C "$(dirname "$(dirname "$(which flutter)")")" apply "$GITHUB_WORKSPACE/.github/patches/flutter_3.24.4_dropdown_menu_enableFilter.diff"
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        with:
+          toolchain: ${{ env.RUST_VERSION }}
+          targets: x86_64-pc-windows-msvc
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          prefix-key: gadesk-windows-x64
+
+      - name: Set up vcpkg
+        uses: lukka/run-vcpkg@b1a0dd252f06b9e25b3c022a9a03bd7a427fb6a2 # v11
+        with:
+          vcpkgDirectory: C:\vcpkg
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT_ID }}
+          doNotCache: false
+
+      - name: Install native dependencies
+        shell: pwsh
+        run: '& "$env:VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows-static "--x-install-root=$env:VCPKG_ROOT/installed"'
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@6fb02220983dee41ce7ae257b6f4d8f9bf5ed4ce # v2
+
+      - name: Build installers
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $parseErrors = $null
+          $null = [System.Management.Automation.Language.Parser]::ParseFile("$pwd/deploy/gadesk/build-windows.ps1", [ref]$tokens, [ref]$parseErrors)
+          if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+          ./deploy/gadesk/build-windows.ps1
+
+      - name: Upload unsigned installers
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: GADESK-1.5.1-windows-x86_64-unsigned
+          path: |
+            target/gadesk-windows/installers/*.exe
+            target/gadesk-windows/installers/*.msi
+            target/gadesk-windows/installers/SHA256SUMS
+          if-no-files-found: error

@@ -1,0 +1,34 @@
+name: gadesk
+services:
+  hbbs:
+    image: rustdesk/rustdesk-server:1.1.16
+    container_name: gadesk-hbbs
+    command: ["hbbs", "-r", "gadesk.grupoamayo.com:21117", "-k", "_"]
+    restart: unless-stopped
+    working_dir: /root
+    volumes:
+      - ./data:/root
+    ports:
+      - "21115:21115/tcp"
+      - "21116:21116/tcp"
+      - "21116:21116/udp"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+  hbbr:
+    image: rustdesk/rustdesk-server:1.1.16
+    container_name: gadesk-hbbr
+    command: ["hbbr", "-k", "_"]
+    restart: unless-stopped
+    working_dir: /root
+    volumes:
+      - ./data:/root
+    ports:
+      - "21117:21117/tcp"
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
