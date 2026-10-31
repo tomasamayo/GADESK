@@ -50,6 +50,11 @@ export CARGO_HOME="$build_root/cargo"
 export RUSTUP_HOME="$build_root/rustup"
 export PUB_CACHE="$build_root/pub-cache"
 export GRADLE_USER_HOME="$build_root/gradle"
+mkdir -p "$GRADLE_USER_HOME"
+# The upstream 1 GiB heap thrashes while assembling this application's plugins.
+# User-home properties override the source project's smaller default.
+printf 'org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=1024m\norg.gradle.workers.max=%s\n' \
+    "${GADESK_BUILD_JOBS:-8}" > "$GRADLE_USER_HOME/gradle.properties"
 export ANDROID_HOME="$toolchains/android-sdk"
 export ANDROID_SDK_ROOT="$ANDROID_HOME"
 export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
