@@ -49,24 +49,44 @@
 
 **Files:** deploy/gadesk/build-android.sh, private ignored signing configuration.
 
-- [ ] Build ARM64 native library and Android app with pinned dependencies.
-- [ ] Sign with a private project keystore preserved outside version control/public files.
-- [ ] Verify signature, application ID, label and embedded ABI.
+- [x] Build ARM64 native library and Android app with pinned dependencies.
+- [x] Sign with a private project keystore preserved outside version control/public files.
+- [x] Verify signature, application ID, label and embedded ABI; downloaded APK verifies with v1/v2 signatures and all five embedded brand assets match the supplied vector mark.
 
 ### Task 4: Produce macOS and Windows installers
 
 **Files:** deploy/gadesk/package-macos.sh, .github/workflows/gadesk-windows.yml.
 
 - [x] Build GADESK macOS release and package an Apple Silicon DMG and PKG.
-- [x] Run an isolated Windows x64 build with artifact upload only (build in progress).
-- [ ] Package GADESK EXE/MSI with consistent runtime, file and service names.
-- [ ] Verify outputs and report certificate/OS test availability honestly.
+- [x] Run an isolated Windows x64 build with artifact upload only; new-logo run 41247268033 passed.
+- [x] Package GADESK EXE/MSI with consistent runtime, file and service names.
+- [x] Verify outputs: CI version probe, x64 PE/MSI metadata, artifact and installer hashes passed. Mac ad hoc/unsigned PKG, Windows unsigned; no interactive Windows or physical Android installation test.
 
 ### Task 5: Publish and final review
 
 **Files:** deploy/gadesk/downloads/index.html, manifest/checksums, deployment notes.
 
-- [ ] Publish only completed installers, public configuration, checksums and corresponding source.
-- [ ] Check HTTPS download status, sizes and SHA256 against local originals.
+- [x] Publish all five verified installers, public configuration, SVG, checksums and corresponding source.
+- [x] Check HTTPS download status, sizes and SHA256 against local originals for all installers and source.
 - [x] Review all existing-code changes for necessity and regressions; fixed ad hoc signing and shared-proxy relay connection ceiling.
-- [ ] Record completed deliverables and any concrete external blockers.
+- [x] Record completed deliverables and limitations; no external blocker remains for artifact delivery.
+
+## Supplied brand mark update
+
+The user supplied `GA-LOGO.png` and requested vectorization. The editable master
+is `res/gadesk/brand-mark.svg`, preserving the teal/gray geometry and registered
+mark. Platform icons, wordmarks and tray assets were regenerated from it.
+Mac native/Flutter release and DMG/PKG verification passed; its UI shows the new
+mark and Listo. Android and Mac packages, SVG and matching source are published
+and their HTTPS download hashes match. Windows run `41247268033`, source
+`10b38db0151d64091b1fa61c6f42051c7bf63fa4`, produced the verified new-logo
+EXE and MSI. The earlier old-logo build remains unpublished.
+
+All five installers are published at `https://gadesk.grupoamayo.com/` and their
+download hashes match. The SVG is available as `GADESK-logo.svg`. Backend WSS
+registration and encrypted relay were exercised with 52 protocol checks, and
+the Mac GUI shows the new logo and Listo. Android signing/identity/ABI/assets
+and Windows CI version/PE/MSI metadata were verified. Physical Android and
+interactive Windows installation/control sessions were not tested. macOS
+requires Apple Silicon and macOS 12.3+, is ad hoc signed and not notarized;
+the PKG and Windows installers have no publisher signature.
