@@ -132,6 +132,10 @@ for bridge in src/bridge_generated.rs src/bridge_generated.io.rs \
     [[ -s "$bridge" ]] || fail "Bridge archive did not supply $bridge"
 done
 ./flutter/build_android_deps.sh arm64-v8a
+# cargo-ndk 3.1.2 configures C/C++ compilation, while bindgen's host libclang
+# needs an explicit Android sysroot for cross-target system headers.
+android_sysroot="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot"
+export BINDGEN_EXTRA_CLANG_ARGS_aarch64_linux_android="--sysroot=$android_sysroot -isystem $android_sysroot/usr/include/aarch64-linux-android -D__ANDROID_API__=21"
 cargo ndk --platform 21 --target aarch64-linux-android \
     build --locked --release --features flutter,hwcodec
 jni_dir=flutter/android/app/src/main/jniLibs/arm64-v8a
