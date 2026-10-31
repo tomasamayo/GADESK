@@ -117,3 +117,15 @@ Preserve Kotlin/JNI namespace `com.carriez.flutter_hbb`, library name
 Local validation of these automation files consists of `bash -n` and script
 argument checks. A successful source build and device test must be recorded
 separately after actual execution.
+
+## Android startup fix (build 70)
+
+Version code 2070 replaces the adaptive launcher icon used inside the startup
+`<bitmap>` with the existing PNG foreground. The old APK crashed before Flutter
+started on the Android 15 emulator and Samsung S24 Ultra running Android 16,
+with `<bitmap> requires a valid 'src' attribute`. The rebuilt APK passed two cold
+startup checks on both the Android 15 ARM64 emulator and the same Samsung S24
+Ultra running Android 16, and initialized the native bridge on both devices.
+It retains the original application ID and signing certificate for in-place
+updates. Publish it as `GADESK-1.5.1-android-arm64-build70.apk` to avoid cached
+downloads, and refresh the original filename as a compatibility alias.

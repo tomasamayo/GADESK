@@ -7,7 +7,7 @@ import sys
 
 root = pathlib.Path(sys.argv[1])
 assets = [
-    ('android', 'GADESK-1.5.1-android-arm64.apk', 'Descargar APK'),
+    ('android', 'GADESK-1.5.1-android-arm64-build70.apk', 'Descargar APK'),
     ('macos', 'GADESK-1.5.1-macos-arm64.dmg', 'Descargar DMG'),
     ('macos', 'GADESK-1.5.1-macos-arm64.pkg', 'Descargar PKG'),
     ('windows', 'GADESK-1.5.1-x86_64-install.exe', 'Descargar EXE'),
