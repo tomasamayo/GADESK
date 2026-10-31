@@ -5,6 +5,7 @@ use std::sync::Once;
 const APP_NAME: &str = "GADESK";
 const ID_SERVER: &str = "gadesk.grupoamayo.com";
 const RELAY_SERVER: &str = "gadesk.grupoamayo.com:21117";
+const API_SERVER: &str = "https://gadesk.grupoamayo.com";
 const PUBLIC_KEY: &str = include_str!("../res/gadesk/server-public-key.txt");
 
 pub fn initialize() {
@@ -15,6 +16,8 @@ pub fn initialize() {
         config::DEFAULT_SETTINGS.write().unwrap().extend([
             (keys::OPTION_CUSTOM_RENDEZVOUS_SERVER.to_owned(), ID_SERVER.to_owned()),
             (keys::OPTION_RELAY_SERVER.to_owned(), RELAY_SERVER.to_owned()),
+            (keys::OPTION_API_SERVER.to_owned(), API_SERVER.to_owned()),
+            (keys::OPTION_ALLOW_WEBSOCKET.to_owned(), "Y".to_owned()),
             (keys::OPTION_KEY.to_owned(), PUBLIC_KEY.trim().to_owned()),
         ]);
         // The stock updater distributes upstream builds with a different identity.

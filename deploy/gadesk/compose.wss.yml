@@ -1,0 +1,62 @@
+name: gadesk-wss
+services:
+  backend:
+    image: gadesk-wss:3.5.200-eb84feff61c2
+    pull_policy: never
+    build:
+      context: ./source
+      dockerfile: Dockerfile.server
+      args:
+        TARGETARCH: ${GADESK_TARGETARCH:-amd64}
+        BETTERDESK_PRODUCT_VERSION: "3.5.200"
+        BETTERDESK_IMAGE_VERSION: "3.5.200"
+        BETTERDESK_COMMIT_SHA: eb84feff61c25595e326294fccd13e27ccd14a29
+      labels:
+        org.opencontainers.image.revision: eb84feff61c25595e326294fccd13e27ccd14a29
+    container_name: gadesk-wss-backend
+    command:
+      - /usr/local/bin/betterdesk-server
+      - -mode
+      - all
+      - -api-port
+      - "21114"
+      - -db
+      - /opt/rustdesk/gadesk.sqlite3
+      - -key-file
+      - /opt/rustdesk/id_ed25519
+      - -relay-servers
+      - gadesk.grupoamayo.com:21117
+      - -always-relay
+      - -p2p-first=false
+    environment:
+      DB_URL: /opt/rustdesk/gadesk.sqlite3
+      ENROLLMENT_MODE: open
+      ALLOW_LEGACY_OUTBOUND: "Y"
+      ALLOW_SHARED_NAT_INITIATOR: "Y"
+      TRUST_PROXY: "Y"
+      TRUSTED_PROXIES: ${GADESK_TRUSTED_PROXIES:?Run deploy-wss.sh to select the proxy gateway}
+      CDAP_ENABLED: "N"
+      MESH_ENABLED: "N"
+    volumes:
+      - ./data:/opt/rustdesk
+    ports:
+      - "127.0.0.1:21118:21118/tcp"
+      - "127.0.0.1:21119:21119/tcp"
+    networks:
+      - wss
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:21114/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+networks:
+  wss:
+    external: true
+    name: gadesk-wss

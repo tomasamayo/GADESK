@@ -10,6 +10,7 @@ The existing authenticated root terminal is the deployment entry point.
 ## Delivery
 
 - RustDesk OSS signaling and relay services, pinned to server 1.1.16.
+- Router-independent HTTPS/WSS transport through the existing public port 443.
 - HTTPS download directory at the provided domain, with artifact checksums,
   public client configuration and corresponding source archive.
 - GADESK clients using their own profile and the supplied server public key.
@@ -45,6 +46,27 @@ the host; correct DNS and HTTPS download responses. Check configured host/key in
 the GADESK process and its registration with the server. Verify APK application
 ID/signature, macOS architecture/signature/DMG mounting and Windows package
 metadata/contents. Record any unavailable device or Windows installation test.
+
+## Network constraint discovered during deployment
+
+The original OSS services are healthy, but their native ports are not reachable
+through the site's router. The user confirmed they cannot access that router.
+Native RustDesk 1.5.1 supports WSS; official OSS server 1.1.16 and master reject
+host registration on TCP/WebSocket. A plain WebSocket reverse proxy is therefore
+insufficient for controlled devices.
+
+Validate the compatible BetterDesk Go signaling/relay backend at source commit
+`eb84feff61c25595e326294fccd13e27ccd14a29`, building only its server Dockerfile.
+Reuse copies of the existing Ed25519 key pair, preserve the old server/database
+for rollback, and keep the new database private. Publish backend WebSocket ports
+only on localhost, behind nginx `/ws/id` and `/ws/relay` on HTTPS 443. Do not
+publish its administration API or deploy the unrelated web console. Confirm
+native registration and relay behavior before claiming compatibility.
+
+GADESK defaults enable `allow-websocket=Y` and use the HTTPS domain as the API
+scheme hint required by the existing client transport selector. This changes
+transport configuration only; the FFI and remote-session implementation remain
+unchanged.
 
 ## Constraints
 
