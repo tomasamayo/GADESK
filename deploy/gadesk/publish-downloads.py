@@ -18,10 +18,16 @@ for platform, name, label in assets:
     path = root / name
     if not path.is_file():
         continue
-    digest = hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+    with path.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
     manifest.append(dict(platform=platform, file=name, label=label,
                          size_mb=round(path.stat().st_size / 1024**2, 1), sha256=digest))
     checksums.append(f'{digest}  {name}\n')
+source = root / 'GADESK-1.5.1-source.tar.gz'
+if source.is_file():
+    with source.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    checksums.append(f'{digest}  {source.name}\n')
 for name, data in [('downloads.json', json.dumps(manifest, indent=2) + '\n'),
                    ('SHA256SUMS', ''.join(checksums))]:
     temporary = root / (name + '.tmp')

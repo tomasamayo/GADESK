@@ -42,12 +42,15 @@ and macOS accessibility/screen-recording permissions in live validation. The
 effective client IP in backend logs should match the Nginx client address;
 adjust the trusted proxy CIDR if Docker presents a different source address.
 
-The official `gadesk-hbbs`/`gadesk-hbbr` containers, their data, and firewall
-rules are preserved. To roll back this alternative, stop its Compose project,
+The deployment script leaves the official containers and firewall untouched.
+After public WSS validation, the current deployment stopped the owned
+`gadesk-hbbs`/`gadesk-hbbr` containers and removed its raw-port UFW rules;
+their private keys and database remain available. To roll back, stop the WSS Compose project,
 restore the previous Nginx extension (or remove it if none existed), run
 Nginx's configuration test, and reload Nginx. Retain its private keys/database
 until the rollback has been verified. Restore the public configuration to the
-transport actually in use.
+transport actually in use. Restart the official services and restore their
+specific firewall rules only if that transport becomes publicly reachable.
 
 The relay currently counts the shared Docker proxy IP, so its per-IP limit is
 explicitly 256 connections (up to 128 paired sessions across the deployment).
