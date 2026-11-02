@@ -1,0 +1,416 @@
+diff --git a/betterdesk-server/api/client_oidc_handlers.go b/betterdesk-server/api/client_oidc_handlers.go
+index 2465266..99a42d7 100644
+--- a/betterdesk-server/api/client_oidc_handlers.go
++++ b/betterdesk-server/api/client_oidc_handlers.go
+@@ -197,6 +197,9 @@ func (s *Server) ensureOIDCUser(result *auth.OIDCResult, cfg *auth.OIDCConfig) (
+ 		log.Printf("[OIDC] Auto-provisioned user %s with role %s", result.Username, role)
+ 		return user, ""
+ 	}
++	if cfg != nil && auth.IsGoogleIssuer(cfg.IssuerURL) && user.AuthProvider != db.AuthProviderOIDC {
++		return nil, "oidc_error"
++	}
+ 
+ 	changed := false
+ 	// A group mapping is an explicit IdP authorization decision. The default
+diff --git a/betterdesk-server/api/client_oidc_handlers_test.go b/betterdesk-server/api/client_oidc_handlers_test.go
+index 9cfd9f2..6fcfd8c 100644
+--- a/betterdesk-server/api/client_oidc_handlers_test.go
++++ b/betterdesk-server/api/client_oidc_handlers_test.go
+@@ -261,3 +261,67 @@ func TestEnsureOIDCUserAppliesExplicitGroupRole(t *testing.T) {
+ 		t.Fatalf("role = %q, want %q", got.Role, auth.RoleAdmin)
+ 	}
+ }
++
++func TestGoogleSignupRejectsExistingLocalAccount(t *testing.T) {
++	database := testSetupDB(t)
++	defer database.Close()
++	hash, err := auth.HashPassword("unused")
++	if err != nil {
++		t.Fatal(err)
++	}
++	user := &db.User{Username: "google:subject-001", PasswordHash: hash, Role: auth.RoleAdmin, AuthProvider: db.AuthProviderLocal}
++	if err := database.CreateUser(user); err != nil {
++		t.Fatal(err)
++	}
++	s := &Server{db: database}
++	got, code := s.ensureOIDCUser(&auth.OIDCResult{Username: user.Username, Role: auth.RolePro}, &auth.OIDCConfig{IssuerURL: "https://accounts.google.com", AllowSignup: true, DefaultRole: auth.RolePro})
++	if got != nil || code == "" {
++		t.Fatal("Google signup claimed an existing local administrator")
++	}
++	stored, err := database.GetUser(user.Username)
++	if err != nil || stored.AuthProvider != db.AuthProviderLocal {
++		t.Fatal("local account was modified")
++	}
++}
++
++func TestGoogleAccountsKeepPrivateBooksAndNoInventory(t *testing.T) {
++	database := testSetupDB(t)
++	defer database.Close()
++	s := newClientLoginTestServer(database)
++	cfg := &auth.OIDCConfig{IssuerURL: "https://accounts.google.com", AllowSignup: true, DefaultRole: auth.RolePro}
++	for _, subject := range []string{"subject-001", "subject-002"} {
++		username := "google:" + subject
++		user, code := s.ensureOIDCUser(&auth.OIDCResult{Username: username, Role: auth.RolePro}, cfg)
++		if code != "" || user.Role != auth.RolePro {
++			t.Fatalf("signup failed: %q", code)
++		}
++		body := `{"data":{"peers":[{"id":"` + subject + `"}],"tags":[]}}`
++		req := withClientUser(httptest.NewRequest(http.MethodPost, "/api/ab/personal", strings.NewReader(body)), username, auth.RolePro)
++		rec := httptest.NewRecorder()
++		s.handleClientAddressBookPersonal(rec, req)
++		if rec.Code != 200 {
++			t.Fatalf("save failed: %d", rec.Code)
++		}
++	}
++	for _, subject := range []string{"subject-001", "subject-002"} {
++		req := withClientUser(httptest.NewRequest(http.MethodGet, "/api/ab/personal", nil), "google:"+subject, auth.RolePro)
++		rec := httptest.NewRecorder()
++		s.handleClientAddressBookPersonal(rec, req)
++		other := "subject-001"
++		if subject == other {
++			other = "subject-002"
++		}
++		if rec.Code != 200 || !strings.Contains(rec.Body.String(), subject) || strings.Contains(rec.Body.String(), other) {
++			t.Fatalf("personal data isolation failed: %s", rec.Body.String())
++		}
++		peers, total := s.buildRustDeskPeerList(req)
++		if total != 0 || len(peers) != 0 {
++			t.Fatal("public account received server device inventory")
++		}
++		denied := httptest.NewRecorder()
++		s.requirePermission(auth.PermServerConfig, func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(200) })(denied, req)
++		if denied.Code != http.StatusForbidden {
++			t.Fatal("public account received admin permission")
++		}
++	}
++}
+diff --git a/betterdesk-server/auth/oidc.go b/betterdesk-server/auth/oidc.go
+index 9577609..67fabfd 100644
+--- a/betterdesk-server/auth/oidc.go
++++ b/betterdesk-server/auth/oidc.go
+@@ -542,6 +542,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+ 	}
+ 
+ 	if resp.StatusCode != http.StatusOK {
++		if IsGoogleIssuer(cfg.IssuerURL) {
++			return nil, fmt.Errorf("Google token exchange failed (HTTP %d)", resp.StatusCode)
++		}
+ 		return nil, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, string(body))
+ 	}
+ 
+@@ -572,6 +575,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+ 	// Fetch userinfo for additional claims
+ 	userinfoClaims, err := p.fetchUserInfo(ctx, tokenResp.AccessToken)
+ 	if err != nil {
++		if IsGoogleIssuer(cfg.IssuerURL) {
++			return nil, fmt.Errorf("Google profile unavailable")
++		}
+ 		log.Printf("[OIDC] UserInfo fetch failed (non-fatal): %v", err)
+ 	} else {
+ 		// Merge userinfo claims (userinfo takes precedence)
+@@ -579,6 +585,12 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+ 			claims[k] = v
+ 		}
+ 	}
++	if IsGoogleIssuer(cfg.IssuerURL) {
++		claims, err = p.verifyGoogleIdentity(ctx, cfg, tokenResp.IDToken, stateEntry.Nonce, userinfoClaims)
++		if err != nil {
++			return nil, err
++		}
++	}
+ 
+ 	// Map claims to result
+ 	result := &OIDCResult{
+@@ -604,6 +616,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+ 	}
+ 
+ 	result.Username = getStringClaim(claims, claimUsername)
++	if IsGoogleIssuer(cfg.IssuerURL) {
++		result.Username = getStringClaim(claims, "gadesk_username")
++	}
+ 	result.Email = getStringClaim(claims, claimEmail)
+ 	result.DisplayName = getStringClaim(claims, claimName)
+ 	result.Groups = getStringSliceClaim(claims, claimGroups)
+@@ -627,6 +642,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+ 	// Map groups to role. The source flag lets provisioning distinguish an
+ 	// explicit group mapping from the configured fallback role.
+ 	result.Role, result.RoleFromGroup = p.resolveRoleWithSource(result.Groups)
++	if IsGoogleIssuer(cfg.IssuerURL) {
++		result.Role, result.RoleFromGroup = RolePro, false
++	}
+ 	result.ReturnURL = returnURL
+ 	result.Flow = flow
+ 	result.ClientID = clientID
+diff --git a/betterdesk-server/auth/oidc_google.go b/betterdesk-server/auth/oidc_google.go
+new file mode 100644
+index 0000000..47ad487
+--- /dev/null
++++ b/betterdesk-server/auth/oidc_google.go
+@@ -0,0 +1,47 @@
++package auth
++
++import (
++	"context"
++	"crypto/subtle"
++	"fmt"
++	"strings"
++
++	"github.com/coreos/go-oidc/v3/oidc"
++)
++
++func IsGoogleIssuer(issuer string) bool {
++	return strings.TrimRight(issuer, "/") == "https://accounts.google.com"
++}
++
++func (p *OIDCProvider) verifyGoogleIdentity(ctx context.Context, cfg OIDCConfig, rawIDToken, nonce string, userinfo map[string]interface{}) (map[string]interface{}, error) {
++	if rawIDToken == "" || nonce == "" {
++		return nil, fmt.Errorf("Google identity or login nonce missing")
++	}
++	ctx = oidc.ClientContext(ctx, p.client)
++	keys := oidc.NewRemoteKeySet(ctx, "https://www.googleapis.com/oauth2/v3/certs")
++	verifier := oidc.NewVerifier("https://accounts.google.com", keys, &oidc.Config{
++		ClientID: cfg.ClientID, SupportedSigningAlgs: []string{"RS256"},
++	})
++	token, err := verifier.Verify(ctx, rawIDToken)
++	if err != nil {
++		return nil, fmt.Errorf("Google identity validation failed")
++	}
++	if token.Subject == "" || subtle.ConstantTimeCompare([]byte(token.Nonce), []byte(nonce)) != 1 {
++		return nil, fmt.Errorf("Google identity does not match this login")
++	}
++	claims := make(map[string]interface{})
++	if err := token.Claims(&claims); err != nil {
++		return nil, fmt.Errorf("Google identity claims invalid")
++	}
++	if claims["email_verified"] != true || getStringClaim(userinfo, "sub") != token.Subject || userinfo["email_verified"] != true {
++		return nil, fmt.Errorf("Google profile identity not verified")
++	}
++	// Only use display attributes after binding UserInfo to the verified subject.
++	for _, name := range []string{"name", "picture", "email"} {
++		if value, ok := userinfo[name].(string); ok {
++			claims[name] = value
++		}
++	}
++	claims["gadesk_username"] = "google:" + token.Subject
++	return claims, nil
++}
+diff --git a/betterdesk-server/auth/oidc_google_test.go b/betterdesk-server/auth/oidc_google_test.go
+new file mode 100644
+index 0000000..d7ed245
+--- /dev/null
++++ b/betterdesk-server/auth/oidc_google_test.go
+@@ -0,0 +1,143 @@
++package auth
++
++import (
++	"context"
++	"crypto"
++	"crypto/rand"
++	"crypto/rsa"
++	"crypto/sha256"
++	"encoding/base64"
++	"encoding/json"
++	"math/big"
++	"net/http"
++	"net/http/httptest"
++	"net/url"
++	"strings"
++	"testing"
++	"time"
++)
++
++type googleFixtureTransport struct{ target string }
++
++func (f googleFixtureTransport) RoundTrip(r *http.Request) (*http.Response, error) {
++	if r.URL.String() == "https://www.googleapis.com/oauth2/v3/certs" {
++		r = r.Clone(r.Context())
++		parsed, _ := url.Parse(f.target + "/keys")
++		r.URL = parsed
++	}
++	return http.DefaultTransport.RoundTrip(r)
++}
++
++func TestExchangeGoogleIdentity(t *testing.T) {
++	key, err := rsa.GenerateKey(rand.Reader, 2048)
++	if err != nil {
++		t.Fatal(err)
++	}
++	for _, test := range []struct {
++		name      string
++		change    string
++		wantError bool
++	}{
++		{"valid stable identity", "", false},
++		{"same email prefix different identity", "other-sub", false},
++		{"wrong signature", "signature", true},
++		{"wrong audience", "aud", true},
++		{"wrong issuer", "iss", true},
++		{"expired token", "exp", true},
++		{"wrong nonce", "nonce", true},
++		{"missing token", "missing", true},
++		{"userinfo identity mismatch", "userinfo-sub", true},
++		{"userinfo unavailable", "userinfo-error", true},
++		{"unverified email", "unverified-email", true},
++	} {
++		t.Run(test.name, func(t *testing.T) {
++			subject := "subject-001"
++			if test.change == "other-sub" {
++				subject = "subject-002"
++			}
++			nonce := ""
++			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				w.Header().Set("Content-Type", "application/json")
++				switch r.URL.Path {
++				case "/keys":
++					_ = json.NewEncoder(w).Encode(map[string]any{"keys": []any{map[string]any{
++						"kty": "RSA", "alg": "RS256", "use": "sig", "kid": "test-key",
++						"n": base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
++						"e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
++					}}})
++				case "/token":
++					claims := map[string]any{"iss": "https://accounts.google.com", "aud": "gadesk-test-client", "exp": time.Now().Add(time.Hour).Unix(), "iat": time.Now().Unix(), "sub": subject, "nonce": nonce, "email": "same@example.org", "email_verified": true}
++					switch test.change {
++					case "aud":
++						claims["aud"] = "another-client"
++					case "iss":
++						claims["iss"] = "https://attacker.example"
++					case "exp":
++						claims["exp"] = time.Now().Add(-time.Hour).Unix()
++					case "nonce":
++						claims["nonce"] = "another-attempt"
++					case "unverified-email":
++						claims["email_verified"] = false
++					}
++					header, _ := json.Marshal(map[string]string{"alg": "RS256", "kid": "test-key"})
++					body, _ := json.Marshal(claims)
++					unsigned := base64.RawURLEncoding.EncodeToString(header) + "." + base64.RawURLEncoding.EncodeToString(body)
++					digest := sha256.Sum256([]byte(unsigned))
++					sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, digest[:])
++					if err != nil {
++						t.Error(err)
++						return
++					}
++					if test.change == "signature" {
++						sig[0] ^= 1
++					}
++					token := unsigned + "." + base64.RawURLEncoding.EncodeToString(sig)
++					if test.change == "missing" {
++						token = ""
++					}
++					_ = json.NewEncoder(w).Encode(map[string]string{"access_token": "fixture-access", "id_token": token})
++				case "/userinfo":
++					if test.change == "userinfo-error" {
++						w.WriteHeader(503)
++						return
++					}
++					sub := subject
++					if test.change == "userinfo-sub" {
++						sub = "attacker"
++					}
++					_ = json.NewEncoder(w).Encode(map[string]any{"sub": sub, "email": "same@example.org", "email_verified": test.change != "unverified-email", "name": "Test person"})
++				default:
++					http.NotFound(w, r)
++				}
++			}))
++			defer srv.Close()
++			p := newTestOIDCProvider(t, &OIDCConfig{Enabled: true, ClientID: "gadesk-test-client", IssuerURL: "https://accounts.google.com", AuthorizationURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: srv.URL + "/token", UserinfoURL: srv.URL + "/userinfo", RedirectURL: "https://gadesk.grupoamayo.com/api/oidc/callback", UsePKCE: true, AllowSignup: true, DefaultRole: RolePro})
++			p.client.Transport = googleFixtureTransport{target: srv.URL}
++			authURL, state, err := p.BuildAuthURL("/")
++			if err != nil {
++				t.Fatal(err)
++			}
++			parsed, _ := url.Parse(authURL)
++			nonce = parsed.Query().Get("nonce")
++			result, err := p.ExchangeCode(context.Background(), "fixture-code", state)
++			if test.wantError {
++				if err == nil {
++					t.Fatalf("invalid Google identity accepted: %+v", result)
++				}
++				return
++			}
++			if err != nil {
++				t.Fatal(err)
++			}
++			if result.Username != "google:"+subject || result.Role != RolePro {
++				t.Fatalf("identity/role = %q/%q, want google:%s/pro", result.Username, result.Role, subject)
++			}
++			if _, err := p.ExchangeCode(context.Background(), "fixture-code", state); err == nil {
++				t.Fatal("replayed state accepted")
++			}
++			if strings.Contains(result.Username, "same") {
++				t.Fatal("email used as account identity")
++			}
++		})
++	}
++}
+diff --git a/betterdesk-server/go.mod b/betterdesk-server/go.mod
+index 824f4da..2b28e72 100644
+--- a/betterdesk-server/go.mod
++++ b/betterdesk-server/go.mod
+@@ -6,6 +6,7 @@ toolchain go1.26.10
+ 
+ require (
+ 	github.com/coder/websocket v1.8.15
++	github.com/coreos/go-oidc/v3 v3.21.0
+ 	github.com/go-ldap/ldap/v3 v3.4.14
+ 	github.com/google/uuid v1.6.0
+ 	github.com/jackc/pgx/v5 v5.10.0
+@@ -18,12 +19,14 @@ require (
+ 	github.com/Azure/go-ntlmssp v0.1.1 // indirect
+ 	github.com/dustin/go-humanize v1.0.1 // indirect
+ 	github.com/go-asn1-ber/asn1-ber v1.5.8 // indirect
++	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
+ 	github.com/jackc/pgpassfile v1.0.0 // indirect
+ 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+ 	github.com/jackc/puddle/v2 v2.2.2 // indirect
+ 	github.com/mattn/go-isatty v0.0.21 // indirect
+ 	github.com/ncruces/go-strftime v1.0.0 // indirect
+ 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
++	golang.org/x/oauth2 v0.36.0 // indirect
+ 	golang.org/x/sync v0.22.0 // indirect
+ 	golang.org/x/sys v0.47.0 // indirect
+ 	golang.org/x/text v0.41.0 // indirect
+diff --git a/betterdesk-server/go.sum b/betterdesk-server/go.sum
+index dd1832c..316bf09 100644
+--- a/betterdesk-server/go.sum
++++ b/betterdesk-server/go.sum
+@@ -4,6 +4,8 @@ github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e h1:4dAU9FXIyQktp
+ github.com/alexbrainman/sspi v0.0.0-20250919150558-7d374ff0d59e/go.mod h1:cEWa1LVoE5KvSD9ONXsZrj0z6KqySlCCNKHlLzbqAt4=
+ github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
+ github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
++github.com/coreos/go-oidc/v3 v3.21.0 h1:wZo4Q9Pum8dYEj0eMUPrqR+kvuGkeUplbLpNCkBqoWM=
++github.com/coreos/go-oidc/v3 v3.21.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
+ github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+ github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+ github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+@@ -11,6 +13,8 @@ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkp
+ github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
+ github.com/go-asn1-ber/asn1-ber v1.5.8 h1:H9AZkK22UOmfX8J84ubyaZxKJZ3FMHVwn8swoMML7iQ=
+ github.com/go-asn1-ber/asn1-ber v1.5.8/go.mod h1:hEBeB/ic+5LoWskz+yKT7vGhhPYkProFKoKdwZRWMe0=
++github.com/go-jose/go-jose/v4 v4.1.4 h1:moDMcTHmvE6Groj34emNPLs/qtYXRVcd6S7NHbHz3kA=
++github.com/go-jose/go-jose/v4 v4.1.4/go.mod h1:x4oUasVrzR7071A4TnHLGSPpNOm2a21K9Kf04k1rs08=
+ github.com/go-ldap/ldap/v3 v3.4.14 h1:D6PYdEgsaVzsXyr6w/yDC06Ria4uUhWm+Rb+er8lfAs=
+ github.com/go-ldap/ldap/v3 v3.4.14/go.mod h1:S4eJUMUNjDkE0ZJtIZdybwyb03sGGLW6gxXT1Hs8VKA=
+ github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
+@@ -52,10 +56,10 @@ github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZN
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
+ github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
+ github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+-github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+-github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
+ github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
++github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
++github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+ golang.org/x/crypto v0.54.0 h1:YLIA59K4fiNzHzjnZt2tUJQjQtUWfWbeHBqKtk3eScw=
+ golang.org/x/crypto v0.54.0/go.mod h1:KWL8ny2AZdGR2cWmzeHrp2azQPGogOv+HeQaVEXC2dk=
+ golang.org/x/crypto v0.55.0 h1:+KWHjbgOaAQ66dh/YlkZKHlz9ZUlq61AFirAR9ntP8M=
+@@ -64,6 +68,8 @@ golang.org/x/mod v0.38.0 h1:MECBjubtXD7yj4HrhIUcywNaGeNVUdfVnxmPajOk4yk=
+ golang.org/x/mod v0.38.0/go.mod h1:V6Xz0pq8TQ3dGqVQ1FVHuelZpAL0uNhSkk9ogYP3c40=
+ golang.org/x/net v0.57.0 h1:K5+3DljvIuDG9/Jv9rvyMywYNFCQ9RSUY6OOTTkT+tE=
+ golang.org/x/net v0.57.0/go.mod h1:KpXc8iv+r3XplLAG/f7Jsf9RPszJzdR0f58q9vGOuEU=
++golang.org/x/oauth2 v0.36.0 h1:peZ/1z27fi9hUOFCAZaHyrpWG5lwe0RJEEEeH0ThlIs=
++golang.org/x/oauth2 v0.36.0/go.mod h1:YDBUJMTkDnJS+A4BP4eZBjCqtokkg1hODuPjwiGPO7Q=
+ golang.org/x/sync v0.22.0 h1:SZjpbeLmrCk4xhRSZFNZW5gFUeCeFgjekvI/+gfScek=
+ golang.org/x/sync v0.22.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
+ golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
