@@ -7,6 +7,7 @@ import 'package:desktop_multi_window/desktop_multi_window.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_hbb/common/widgets/gadesk_surface.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_hbb/common/formatter/id_formatter.dart';
 import 'package:flutter_hbb/desktop/widgets/refresh_wrapper.dart';
@@ -577,6 +578,10 @@ class MyTheme {
   );
 
   static ThemeMode getThemeModePreference() {
+    if (appName == 'GADESK') {
+      return gadeskThemePreference(
+          appName, bind.mainGetLocalOption(key: kCommConfKeyTheme));
+    }
     return themeModeFromString(bind.mainGetLocalOption(key: kCommConfKeyTheme));
   }
 
