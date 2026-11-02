@@ -8,6 +8,14 @@ gadesk_web=/www/wwwroot/GA/DATAX/GADESK
 gadesk_extension=/www/server/panel/vhost/nginx/extension/gadesk.grupoamayo.com
 gadesk_commit=eb84feff61c25595e326294fccd13e27ccd14a29
 gadesk_source_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+gadesk_patch_file="$gadesk_source_dir/patches/betterdesk-google.patch"
+gadesk_patch_sha="$(python3 - "$gadesk_patch_file" <<'PY'
+import hashlib
+import pathlib
+import sys
+print(hashlib.sha256(pathlib.Path(sys.argv[1]).read_bytes()).hexdigest())
+PY
+)"
 if [[ "$EUID" -ne 0 ]]; then
   echo 'Run this deployment as root.' >&2
   exit 1
@@ -65,17 +73,22 @@ case "$(docker info --format '{{.Architecture}}')" in
   aarch64|arm64) gadesk_arch=arm64 ;;
   *) echo 'Unsupported Docker server architecture.' >&2; exit 1 ;;
 esac
-printf 'GADESK_TRUSTED_PROXIES=%s\nGADESK_TARGETARCH=%s\n' "$gadesk_proxy_cidr" "$gadesk_arch" > "$gadesk_dir/.env"
+printf 'GADESK_TRUSTED_PROXIES=%s\nGADESK_TARGETARCH=%s\nGADESK_BACKEND_PATCH_SHA=%s\n' "$gadesk_proxy_cidr" "$gadesk_arch" "$gadesk_patch_sha" > "$gadesk_dir/.env"
 install -m 600 "$gadesk_source_dir/compose.wss.yml" "$gadesk_dir/compose.yml"
 
 if [[ ! -d "$gadesk_dir/source/.git" ]]; then
   git init -q "$gadesk_dir/source"
 fi
 git -C "$gadesk_dir/source" fetch --quiet --depth 1 https://github.com/UNITRONIX/BetterDesk.git "$gadesk_commit"
+if git -C "$gadesk_dir/source" apply --reverse --check "$gadesk_patch_file" 2>/dev/null; then
+  git -C "$gadesk_dir/source" apply --reverse "$gadesk_patch_file"
+fi
 git -C "$gadesk_dir/source" diff --quiet
 git -C "$gadesk_dir/source" diff --cached --quiet
 git -C "$gadesk_dir/source" -c advice.detachedHead=false checkout --quiet --detach "$gadesk_commit"
 [[ "$(git -C "$gadesk_dir/source" rev-parse HEAD)" == "$gadesk_commit" ]]
+git -C "$gadesk_dir/source" apply --check "$gadesk_patch_file"
+git -C "$gadesk_dir/source" apply "$gadesk_patch_file"
 cd "$gadesk_dir"
 docker compose config --quiet
 docker compose build backend
@@ -93,6 +106,17 @@ done
 
 install -d -m 755 "$gadesk_extension"
 gadesk_proxy_path="$gadesk_extension/gadesk-wss.conf"
+gadesk_account_inc="$gadesk_extension/gadesk-account-proxy.inc"
+gadesk_account_rates=/www/server/panel/vhost/nginx/00-gadesk-account-rates.conf
+gadesk_account_backup="$(mktemp -d "$gadesk_dir/nginx-accounts.previous.XXXXXX")"
+for gadesk_config_file in "$gadesk_account_inc" "$gadesk_account_rates"; do
+  gadesk_config_name="$(basename "$gadesk_config_file")"
+  if [[ -e "$gadesk_config_file" ]]; then
+    cp -p "$gadesk_config_file" "$gadesk_account_backup/$gadesk_config_name"
+  else
+    touch "$gadesk_account_backup/$gadesk_config_name.absent"
+  fi
+done
 gadesk_backup=
 if [[ -e "$gadesk_proxy_path" ]]; then
   gadesk_backup="$(mktemp "$gadesk_dir/nginx-wss.previous.XXXXXX")"
@@ -104,7 +128,17 @@ restore_proxy_config() {
   else
     rm -f "$gadesk_proxy_path"
   fi
+  for gadesk_config_file in "$gadesk_account_inc" "$gadesk_account_rates"; do
+    gadesk_config_name="$(basename "$gadesk_config_file")"
+    if [[ -e "$gadesk_account_backup/$gadesk_config_name.absent" ]]; then
+      rm -f "$gadesk_config_file"
+    else
+      cp -p "$gadesk_account_backup/$gadesk_config_name" "$gadesk_config_file"
+    fi
+  done
 }
+install -m 644 "$gadesk_source_dir/nginx-account-proxy.inc" "$gadesk_account_inc"
+install -m 644 "$gadesk_source_dir/nginx-account-rates.conf" "$gadesk_account_rates"
 install -m 644 "$gadesk_source_dir/nginx-wss.conf" "$gadesk_proxy_path"
 if ! "$gadesk_nginx" -t; then
   restore_proxy_config

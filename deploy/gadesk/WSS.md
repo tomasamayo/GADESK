@@ -56,3 +56,11 @@ The relay currently counts the shared Docker proxy IP, so its per-IP limit is
 explicitly 256 connections (up to 128 paired sessions across the deployment).
 Additional file-transfer or other sessions also consume slots. This is a finite
 global ceiling behind the proxy; review capacity before increasing it.
+
+## Google accounts (prepared, not yet deployed)
+
+The source now includes a pinned Google-verification patch, localhost API mapping
+and an explicit account/AB nginx allowlist. See [GOOGLE.md](GOOGLE.md) for the
+patch, private configuration and staged checks. Production still uses the earlier
+WSS-only configuration until the new image and Google setup are verified and
+promoted. The administration API remains private in both configurations.

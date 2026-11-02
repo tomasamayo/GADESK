@@ -1,7 +1,7 @@
 name: gadesk-wss
 services:
   backend:
-    image: gadesk-wss:3.5.200-eb84feff61c2
+    image: gadesk-wss:3.5.200-google-${GADESK_BACKEND_PATCH_SHA:?Run deploy-wss.sh to verify the patch}
     pull_policy: never
     build:
       context: ./source
@@ -13,6 +13,7 @@ services:
         BETTERDESK_COMMIT_SHA: eb84feff61c25595e326294fccd13e27ccd14a29
       labels:
         org.opencontainers.image.revision: eb84feff61c25595e326294fccd13e27ccd14a29
+        com.grupoamayo.gadesk.patch-sha256: ${GADESK_BACKEND_PATCH_SHA}
     container_name: gadesk-wss-backend
     command:
       - /usr/local/bin/betterdesk-server
@@ -42,6 +43,7 @@ services:
     volumes:
       - ./data:/opt/rustdesk
     ports:
+      - "127.0.0.1:21114:21114/tcp"
       - "127.0.0.1:21118:21118/tcp"
       - "127.0.0.1:21119:21119/tcp"
     networks:
