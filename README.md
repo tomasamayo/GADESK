@@ -1,3 +1,21 @@
+# GADESK · Grupo Amayo
+
+Fork personalizado de RustDesk con servidor propio, interfaz de GADESK y registro
+público con Google. La primera vez, **Ajustes → Cuenta → Iniciar sesión → Continuar
+con Google** crea una cuenta personal. El selector permite elegir otra cuenta y
+cada usuario conserva su propia libreta. Conectar por ID sigue requiriendo la
+contraseña o aprobación del equipo remoto.
+
+[Descargas Android, macOS y Windows](https://gadesk.grupoamayo.com/) ·
+[Privacidad](https://gadesk.grupoamayo.com/privacy.html) ·
+[Despliegue y validación de Google](deploy/gadesk/GOOGLE.md)
+
+Clientes build71: Android ARM64, macOS Apple Silicon (DMG/PKG) y Windows x64
+(EXE/MSI). macOS tiene firma ad hoc y Windows no tiene firma de editor.
+Se conservan los avisos y la licencia AGPL-3.0 del proyecto original.
+
+---
+
 <p align="center">
   <img src="res/logo-header.svg" alt="RustDesk - Your remote desktop"><br>
   <a href="#raw-steps-to-build">Build</a> •

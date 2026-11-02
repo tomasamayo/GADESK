@@ -248,7 +248,7 @@ index 9cfd9f2..6fcfd8c 100644
 +	}
 +}
 diff --git a/betterdesk-server/auth/oidc.go b/betterdesk-server/auth/oidc.go
-index 9577609..52adbf5 100644
+index 9577609..c7d43b9 100644
 --- a/betterdesk-server/auth/oidc.go
 +++ b/betterdesk-server/auth/oidc.go
 @@ -65,6 +65,7 @@ type OIDCResult struct {
@@ -259,7 +259,17 @@ index 9577609..52adbf5 100644
  	Email         string
  	Role          string
  	RoleFromGroup bool
-@@ -542,6 +543,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -448,6 +449,9 @@ func (p *OIDCProvider) buildAuthURL(base oidcState) (string, string, error) {
+ 		scopes = "openid profile email"
+ 	}
+ 	params.Set("scope", scopes)
++	if IsGoogleIssuer(cfg.IssuerURL) {
++		params.Set("prompt", "select_account")
++	}
+ 
+ 	// PKCE
+ 	if cfg.UsePKCE {
+@@ -542,6 +546,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	}
  
  	if resp.StatusCode != http.StatusOK {
@@ -269,7 +279,7 @@ index 9577609..52adbf5 100644
  		return nil, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, string(body))
  	}
  
-@@ -572,6 +576,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -572,6 +579,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	// Fetch userinfo for additional claims
  	userinfoClaims, err := p.fetchUserInfo(ctx, tokenResp.AccessToken)
  	if err != nil {
@@ -279,7 +289,7 @@ index 9577609..52adbf5 100644
  		log.Printf("[OIDC] UserInfo fetch failed (non-fatal): %v", err)
  	} else {
  		// Merge userinfo claims (userinfo takes precedence)
-@@ -579,6 +586,12 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -579,6 +589,12 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  			claims[k] = v
  		}
  	}
@@ -292,7 +302,7 @@ index 9577609..52adbf5 100644
  
  	// Map claims to result
  	result := &OIDCResult{
-@@ -604,6 +617,10 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -604,6 +620,10 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	}
  
  	result.Username = getStringClaim(claims, claimUsername)
@@ -303,7 +313,7 @@ index 9577609..52adbf5 100644
  	result.Email = getStringClaim(claims, claimEmail)
  	result.DisplayName = getStringClaim(claims, claimName)
  	result.Groups = getStringSliceClaim(claims, claimGroups)
-@@ -627,6 +644,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -627,6 +647,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	// Map groups to role. The source flag lets provisioning distinguish an
  	// explicit group mapping from the configured fallback role.
  	result.Role, result.RoleFromGroup = p.resolveRoleWithSource(result.Groups)
@@ -368,10 +378,10 @@ index 0000000..47ad487
 +}
 diff --git a/betterdesk-server/auth/oidc_google_test.go b/betterdesk-server/auth/oidc_google_test.go
 new file mode 100644
-index 0000000..d7ed245
+index 0000000..0ad8d9a
 --- /dev/null
 +++ b/betterdesk-server/auth/oidc_google_test.go
-@@ -0,0 +1,143 @@
+@@ -0,0 +1,164 @@
 +package auth
 +
 +import (
@@ -513,6 +523,27 @@ index 0000000..d7ed245
 +				t.Fatal("email used as account identity")
 +			}
 +		})
++	}
++}
++
++func TestGoogleAuthorizationPromptsAccountSelection(t *testing.T) {
++	for _, issuer := range []string{"https://accounts.google.com", "https://example.org"} {
++		p := newTestOIDCProvider(t, &OIDCConfig{Enabled: true, IssuerURL: issuer, AuthorizationURL: issuer + "/auth", ClientID: "fixture"})
++		authURL, _, err := p.BuildAuthURL("/")
++		if err != nil {
++			t.Fatal(err)
++		}
++		parsed, err := url.Parse(authURL)
++		if err != nil {
++			t.Fatal(err)
++		}
++		want := ""
++		if issuer == "https://accounts.google.com" {
++			want = "select_account"
++		}
++		if got := parsed.Query().Get("prompt"); got != want {
++			t.Fatalf("issuer %s: prompt = %q, want %q", issuer, got, want)
++		}
 +	}
 +}
 diff --git a/betterdesk-server/go.mod b/betterdesk-server/go.mod

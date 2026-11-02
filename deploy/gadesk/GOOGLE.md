@@ -1,12 +1,12 @@
 # GADESK: registro público con Google
 
-Estado: integración en preparación; el registro público todavía no está activo.
+Estado: registro público activado en producción el 1 de noviembre de 2026, tras aprobación del propietario y pruebas con dos cuentas Google.
 
 ## Backend reproducible
 
 Base BetterDesk: `eb84feff61c25595e326294fccd13e27ccd14a29`.
 Parche: `patches/betterdesk-google.patch`.
-SHA-256: `9d04483a4961275c16765fe1efdae00b9f1ecd61a1f9a3faef7e78569cd3a75d`.
+SHA-256: `355668c6a8205e8f56ffaacf5b7e0ca1f56a98733cc029afe9920073128594f6`.
 Licencia original: `third-party/BetterDesk-LICENSE` (AGPL-3.0).
 El parche añade la biblioteca de verificación `github.com/coreos/go-oidc/v3`
 fijada a v3.21.0, con sus dependencias y sumas. No se implementa criptografía
@@ -45,8 +45,8 @@ el VPS, fuera de la web, el repositorio y los instaladores; no se envía por cha
 Primero se prueba en configuración de pruebas independiente. No se activará
 facturación para esta integración. Correo público de asistencia autorizado: `tomasamayo@gmail.com`. El propietario
 autorizó aceptar la política de Google y crear el cliente OAuth durante la
-configuración. La identidad del responsable para la página de privacidad se
-confirmará antes de publicar ese texto.
+configuración. El propietario aprobó publicar la política con `Grupo Amayo J Sac` como responsable
+y ese correo de contacto; está disponible en `/privacy.html`.
 
 ## Validación realizada
 
@@ -98,7 +98,7 @@ el backend después y verificar el inicio de sesión antes de anunciarlo.
 ## Entorno de pruebas (1 de noviembre de 2026)
 
 La primera versión del parche compiló en el VPS como `gadesk-google-stage:14538850`.
-La ampliación de perfiles (SHA actual arriba) pasó la suite Go completa y
+La ampliación de perfiles (parche anterior `9d04483a…`) pasó la suite Go completa y
 compiló como `gadesk-google-stage:9d04483a`; volvió a superar las 26
 comprobaciones HTTP en `/home/impetu/gadesk-google-profile-stage`.
 Un backend separado con base/clave nuevas y un nginx separado completaron 26
@@ -110,8 +110,86 @@ aceptó la sintaxis, pero su comprobación completa como usuario impetu no pudo
 acceder a sus rutas privadas de PID/temporales. El despliegue de producción
 debe ejecutar su validación habitual como root antes de recargar.
 
-Los fixtures se conservan únicamente bajo `/home/impetu/gadesk-google-stage`,
-los puertos de prueba sólo escuchan en localhost y no contienen datos reales
-ni credenciales Google. El servicio y nginx de producción todavía no se han
-reemplazado. Los tests Python de configuración (3) y Docker Compose config
-pasaron localmente. El acceso real con Google sigue pendiente de su cliente OAuth.
+Los fixtures sintéticos de HTTP se conservan en directorios privados de pruebas.
+Los proyectos Google `gadesk-grupoamayo` y `gadesk-grupoamayo-test` tienen clientes
+separados; sus secretos permanecen en archivos 0600 fuera de la web del VPS.
+
+Con aprobación expresa del propietario se activaron temporalmente las rutas HTTPS
+de cuentas contra `gadesk-google-oauth-test`, API `127.0.0.1:22134`. La base/clave de
+pruebas son persistentes y privadas bajo `/home/impetu/gadesk-google-oauth-test/data`.
+El relay original sigue sin cambios. La recarga del nginx de aaPanel y los checks
+HTTPS pasaron; la comprobación del relay por WSS completó 52 verificaciones.
+El proyecto de pruebas permite únicamente los dos correos autorizados por el propietario.
+
+El acceso real desde macOS build71 confirmó perfiles persistentes y dos identidades
+Google diferentes, con libretas separadas y sin acceso a inventario ni administración.
+El cambio de selector se desplegó como `gadesk-google-stage:355668c6`, conservando la
+base, su copia consistente y el contenedor anterior detenido para recuperación.
+Con aprobación explícita en el paso final, el proyecto `gadesk-grupoamayo` pasó a
+«En producción». Se configuró su cliente privado en el backend original actualizado,
+con API en localhost21114 y clave de relay conservada. `nginx -t` ejecutado como root
+pasó y aaPanel confirmó la recarga. La API HTTPS usa el cliente de producción, PKCE
+y sólo los scopes aprobados; currentUser sin sesión devuelve401 y administración404.
+Las 52 comprobaciones de WSS/relay cifrado pasaron de nuevo. Los accesos reales
+en producción devolvieron perfiles verificados con sesiones ordinarias sin administración.
+Las dos identidades mantuvieron libretas separadas; al volver a la cuenta principal
+su identidad y libreta persistieron. La entrada sintética de verificación fue retirada.
+
+Recuperación privada: `/opt/gadesk/wss/google-before-build71` conserva SQLite
+consistente, claves, compose, env, configuración nginx e inspección del contenedor.
+El origen previo está en `source.before-google71`; la nueva fuente aplicada ocupa
+`source`. Los servicios Google de pruebas quedaron detenidos y sus datos privados
+persistentes se conservaron. La imagen de producción lleva el SHA completo del parche.
+Los instaladores build71 y la fuente correspondiente se promovieron juntos; las
+versiones anteriores de alias, manifiesto e índice se copiaron al respaldo privado.
+Los cinco binarios publicados, las fuentes y la política de privacidad se descargaron
+por HTTPS y coincidieron con sus SHA-256 locales.
+
+La fuente correspondiente de los clientes build71 permanece en
+`GADESK-1.5.1-build71-source.tar.gz` (revisión `80b1857`). El cambio posterior del
+servidor tiene su fuente completa y Dockerfile por separado en
+`GADESK-betterdesk-355668c6-source.tar.gz`, SHA-256
+`5aed48c95e181f0249d8911f572f0091cea436ef01ea2fca851b880f899b444b`.
+
+El parche solicita `prompt=select_account` únicamente al proveedor Google para
+que cerrar sesión en GADESK permita elegir otra cuenta sin cerrar la sesión del navegador.
+La prueba de regresión reproduce la URL anterior sin selector y mantiene sin cambios
+la autorización de los demás proveedores.
+
+## Registro completo de decisiones de ejecución y revisión
+
+La revisión independiente no encontró incidencias Critical/Important en el candidato.
+El selector de cuentas fue una corrección posterior reportada por el propietario,
+validada con regresión RED→GREEN y pruebas reales dentro de la única pasada de correcciones.
+Estas son todas las decisiones registradas, incluidas las cuestiones que la revisión
+delegó al implementador; se conserva su justificación y el coste si resultan incorrectas.
+
+- Work in the existing dedicated codex/gadesk-deployment checkout — user chose execution here, it is clean and not main/master, and current toolchain caches are already configured here — cost if wrong: concurrent manual edits would need reconciliation.
+- Run the verified official Go1.26.10 darwin-arm64 toolchain locally rather than through VPS UI/Docker for unit tests — exact upstream toolchain is available and fixture tests do not depend on Linux — cost if wrong: Linux runtime differences still require staged-container tests before deployment.
+- verification is an OIDCProvider method rather than a free function to reuse the existing HTTP client timeout and test transport — avoids global network configuration — cost if wrong: method may need adaptation if upstream client ownership changes.
+- two-account/private-inventory checks characterize existing pro-role boundaries (not artificially forced RED); new validation and local collision tests supply the feature RED→GREEN — cost if wrong: existing isolation assumptions must still be verified through staged HTTP routes.
+- keep group inventory APIs private; the GADESK public-account UI will explain unsupported shared-device inventory rather than query /api/users or /api/peers — required by public pro account scope and approved spec — cost if wrong: shared organization inventory would need a separately authorized feature.
+- interleave independent UI work while server validation builds in background, retaining incomplete task gates rather than marking them done — avoids waiting on external setup and preserves approved sequence dependencies — cost if wrong: final review must inspect combined task ranges.
+- persist verified Google display name/email/avatar in feature-prefixed private DB config using the existing DB interface, with Google-only read/write hooks — approved spec requires a human-readable profile after session refresh; avoids broad User schema/driver changes — cost if wrong: profile records need explicit removal together with an account deletion request.
+- owner explicitly authorized agent to accept the displayed Google API User Data Policy and create the OAuth web client at action time, superseding the plan handoff — follows newer direct owner instruction — cost if wrong: owner remains responsible for policy acceptance and must revoke the client if configuration is rejected. No billing enabled.
+- live Google signup/cancel/retry/logout set aside by review — keep an explicit live verification gate before public signup is advertised — cost if wrong: broken browser-return or session behavior could escape automated tests.
+- Android/Windows physical runtime checks set aside by review — run available emulator/packaging/CI checks and report unavailable hardware tests — cost if wrong: device-specific behavior remains unverified.
+- privacy-owner identity/approval and Google publication set aside by review — require factual owner approval and Google readiness before public activation — cost if wrong: release remains blocked or Google rejects public access.
+- non-Google upstream identity validation remains outside this Google-only patch — server is configured only for the verified Google flow and GADESK hides other providers — cost if wrong: enabling another provider would need a separate verification audit.
+- outgoing-only Settings remains available from the existing title-bar action — no new sidebar shortcut is necessary to preserve capability — cost if wrong: users need the alternate existing entry.
+- reviewer did not receive original mockup pixels — implementer compared the running macOS UI with the supplied reference and tested small/zoomed windows — cost if wrong: small visual differences remain.
+- versioned source correspondence and stable alias promotion remain release gates — generate from actual build71 revision including pinned submodule/backend patch and update the source alias together with installers — cost if wrong: downloads could point at older corresponding source.
+- retain the original incoming-only desktop layout because its existing child-key sizing lifecycle depends on it; apply the new sidebar to full/outgoing clients — preserves directional controls without native window lifecycle changes — cost if wrong: incoming-only visual parity is deferred.
+
+Minor diferido: `deploy-wss.sh` rechaza de forma segura un checkout que lleva
+un parche Google anterior diferente. Para una actualización futura debe recrearse
+el checkout administrado en el pin antes de aplicar el nuevo parche; el origen previo
+se conserva en el respaldo. No se añadió lógica para administrar historiales de parches.
+
+Límites de validación: el propietario confirmó arranque del APK71 en el Samsung S24;
+la compilación y estructura de Windows pasaron, pero no se ejecutó Windows físico.
+macOS conserva firma ad hoc y Windows carece de firma de editor. No se afirma
+notarización ni verificación de marca por Google. Caducidad y rechazo de estados
+inválidos se verifican en las suites automatizadas; no se esperó la expiración real
+de un consentimiento Google. El relay se probó a nivel de protocolo cifrado con
+IDs sintéticos, sin afirmar una sesión real completa de vídeo/ratón entre equipos.

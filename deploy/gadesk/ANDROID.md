@@ -129,3 +129,21 @@ Ultra running Android 16, and initialized the native bridge on both devices.
 It retains the original application ID and signing certificate for in-place
 updates. Publish it as `GADESK-1.5.1-android-arm64-build70.apk` to avoid cached
 downloads, and refresh the original filename as a compatibility alias.
+
+## Google and visual update (build 71)
+
+Version code2071 retains the build70 startup fix, application ID, JNI namespace,
+ARM64 native library and original signing certificate. It adds the GADESK mobile
+cards/empty states and Google-first account panel. The APK SHA-256 is
+`72282b86f45f9734835f0b0e7f3985ef2a5424b449eca6bd3fe825698906c4e9`.
+Its signer SHA-256 remains
+`7929cdf9d515a7e07e12c24a1191396d33daf317b83cb2271453213d328aac3a`.
+
+The owner confirmed installation and startup on the Samsung S24 Ultra. The API35
+emulator installed the exact APK and rendered the home screen, but host slowness
+caused a System UI ANR; a complete emulator navigation/rotation matrix is not
+claimed. Physical Android Google browser-return and remote-control permissions
+were not independently tested in this release. Reduced-height/large-text layout
+is covered by the Flutter widget suite. Client source is revision80b1857, with
+its complete corresponding source published beside the installers. The subsequent
+account-selector fix runs entirely on the server and requires no new APK.

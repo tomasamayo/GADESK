@@ -4,9 +4,11 @@ This alternative uses only BetterDesk's Go backend, pinned to
 `eb84feff61c25595e326294fccd13e27ccd14a29` (3.5.200). It builds
 `Dockerfile.server`; it does not install the BetterDesk web console. The public
 entry points are the existing HTTPS virtual host's `/ws/id` and `/ws/relay`.
-The API and native TCP/UDP listeners remain inside the container network.
+The account API is mapped to localhost for an explicit HTTPS allowlist; native
+TCP/UDP listeners remain inside the container network.
 
-Copy `compose.wss.yml`, `deploy-wss.sh` and `nginx-wss.conf` into one private
+Copy the `deploy/gadesk` deployment files, including `patches/` and the account
+nginx includes, into one private
 directory on the server and run `bash deploy-wss.sh` as root. Docker Compose,
 Git, Python 3 and the existing aaPanel Nginx installation are required. The
 initial Go image build requires Internet access and available disk space.
@@ -57,10 +59,12 @@ explicitly 256 connections (up to 128 paired sessions across the deployment).
 Additional file-transfer or other sessions also consume slots. This is a finite
 global ceiling behind the proxy; review capacity before increasing it.
 
-## Google accounts (prepared, not yet deployed)
+## Google accounts (production, build 71)
 
-The source now includes a pinned Google-verification patch, localhost API mapping
-and an explicit account/AB nginx allowlist. See [GOOGLE.md](GOOGLE.md) for the
-patch, private configuration and staged checks. Production still uses the earlier
-WSS-only configuration until the new image and Google setup are verified and
-promoted. The administration API remains private in both configurations.
+The pinned Google-verification patch and exact account/address-book allowlist are
+active. The account API listens only on localhost21114; administrative routes
+remain private. See [GOOGLE.md](GOOGLE.md) for source correspondence, private
+configuration, owner-approved publication, real-account verification and rollback.
+The public key is unchanged. After deployment, all 52 synthetic WSS protocol checks
+passed, including registration, key exchange and bidirectional encrypted relay.
+This does not claim a full live video/input session between physical machines.
