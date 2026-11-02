@@ -17,6 +17,8 @@ import '../../consts.dart';
 import '../../models/model.dart';
 import '../../models/platform_model.dart';
 import 'home_page.dart';
+import '../widgets/gadesk_connection_card.dart';
+import '../../common/widgets/gadesk_surface.dart';
 
 /// Connection page for connecting to a remote peer.
 class ConnectionPage extends StatefulWidget implements PageShape {
@@ -148,13 +150,15 @@ class _ConnectionPageState extends State<ConnectionPage> {
   /// UI for the remote ID TextField.
   /// Search for a peer and connect to it if the id exists.
   Widget _buildRemoteIDTextField() {
+    final gadesk = bind.mainGetAppNameSync() == 'GADESK';
     final w = SizedBox(
-      height: 84,
+      height: gadesk ? 96 : 84,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
         child: Ink(
           decoration: BoxDecoration(
-            color: Theme.of(context).cardColor,
+            color: gadesk ? GadeskPalette.of(context).surface : Theme.of(context).cardColor,
+            border: gadesk ? Border.all(color: GadeskPalette.of(context).border) : null,
             borderRadius: BorderRadius.all(Radius.circular(13)),
           ),
           child: Row(
@@ -334,7 +338,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
                         },
                         icon: Icon(Icons.clear, color: MyTheme.darkGray)),
                   )),
-              SizedBox(
+              if (!gadesk) SizedBox(
                 width: 60,
                 height: 60,
                 child: IconButton(
@@ -348,6 +352,14 @@ class _ConnectionPageState extends State<ConnectionPage> {
         ),
       ),
     );
+    if (gadesk) {
+      return GadeskMobileConnectionCard(
+        title: translate('Control Remote Desktop'),
+        input: w,
+        connectLabel: translate('Connect'),
+        onConnect: onConnect,
+      ).marginSymmetric(vertical: 12);
+    }
     final child = Column(children: [
       if (isWebDesktop)
         getConnectionPageTitle(context, true)

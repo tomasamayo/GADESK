@@ -9,6 +9,7 @@ import 'package:get/get.dart';
 import 'package:provider/provider.dart';
 
 import '../../common.dart';
+import '../../common/widgets/gadesk_surface.dart';
 import '../../common/widgets/dialog.dart';
 import '../../consts.dart';
 import '../../models/platform_model.dart';
@@ -881,6 +882,15 @@ class PaddingCard extends StatelessWidget {
                   )
                 ],
               )));
+    }
+    if (bind.mainGetAppNameSync() == 'GADESK') {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 0),
+        child: GadeskSurface(
+          padding: const EdgeInsets.all(18),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children),
+        ),
+      );
     }
     return SizedBox(
         width: double.maxFinite,

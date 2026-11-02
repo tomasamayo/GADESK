@@ -43,8 +43,10 @@ Permisos solicitados: `openid profile email`. El propietario crea el cliente y
 completa las aceptaciones o verificaciones de Google. El secreto permanece en
 el VPS, fuera de la web, el repositorio y los instaladores; no se envía por chat.
 Primero se prueba en configuración de pruebas independiente. No se activará
-facturación para esta integración. La identidad/contacto del responsable para
-la página de privacidad se confirmará antes de publicar ese texto.
+facturación para esta integración. Correo público de asistencia autorizado: `tomasamayo@gmail.com`. El propietario
+autorizó aceptar la política de Google y crear el cliente OAuth durante la
+configuración. La identidad del responsable para la página de privacidad se
+confirmará antes de publicar ese texto.
 
 ## Validación realizada
 
@@ -96,8 +98,9 @@ el backend después y verificar el inicio de sesión antes de anunciarlo.
 ## Entorno de pruebas (1 de noviembre de 2026)
 
 La primera versión del parche compiló en el VPS como `gadesk-google-stage:14538850`.
-La ampliación de perfiles (SHA actual arriba) pasó la suite Go completa local;
-su nueva imagen y las comprobaciones HTTP se validarán antes de desplegar.
+La ampliación de perfiles (SHA actual arriba) pasó la suite Go completa y
+compiló como `gadesk-google-stage:9d04483a`; volvió a superar las 26
+comprobaciones HTTP en `/home/impetu/gadesk-google-profile-stage`.
 Un backend separado con base/clave nuevas y un nginx separado completaron 26
 comprobaciones HTTP reales: opciones, métodos, sesión bearer, rutas
 administrativas privadas y dos libretas independientes. El límite de inicio

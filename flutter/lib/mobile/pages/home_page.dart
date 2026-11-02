@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import '../../common/widgets/gadesk_surface.dart';
 import 'package:flutter_hbb/mobile/pages/server_page.dart';
 import 'package:flutter_hbb/mobile/pages/settings_page.dart';
 import 'package:flutter_hbb/web/settings_page.dart';
@@ -61,6 +63,8 @@ class HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    final gadesk = bind.mainGetAppNameSync() == 'GADESK';
+    final colors = GadeskPalette.of(context);
     return WillPopScope(
         onWillPop: () async {
           if (_selectedIndex != 0) {
@@ -73,8 +77,11 @@ class HomePageState extends State<HomePage> {
           return false;
         },
         child: Scaffold(
-          // backgroundColor: MyTheme.grayBg,
+          backgroundColor: gadesk ? colors.background : null,
           appBar: AppBar(
+            backgroundColor: gadesk ? colors.surface : null,
+            foregroundColor: gadesk ? colors.text : null,
+            elevation: gadesk ? 0 : null,
             centerTitle: true,
             title: appTitle(),
             actions: _pages.elementAt(_selectedIndex).appBarActions,
@@ -87,7 +94,8 @@ class HomePageState extends State<HomePage> {
                 .toList(),
             currentIndex: _selectedIndex,
             type: BottomNavigationBarType.fixed,
-            selectedItemColor: MyTheme.accent, //
+            backgroundColor: gadesk ? colors.surface : null,
+            selectedItemColor: gadesk ? GadeskPalette.teal : MyTheme.accent,
             unselectedItemColor: MyTheme.darkGray,
             onTap: (index) => setState(() {
               // close chat overlay when go chat page
@@ -149,6 +157,13 @@ class HomePageState extends State<HomePage> {
           ),
         ],
       );
+    }
+    if (bind.mainGetAppNameSync() == 'GADESK') {
+      return Row(mainAxisSize: MainAxisSize.min, children: [
+        SvgPicture.asset('assets/icon.svg', width: 25, height: 36),
+        const SizedBox(width: 10),
+        const Flexible(child: Text('GADESK', style: TextStyle(fontWeight: FontWeight.w700))),
+      ]);
     }
     return Text(bind.mainGetAppNameSync());
   }
