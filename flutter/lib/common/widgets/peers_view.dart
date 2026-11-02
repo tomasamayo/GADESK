@@ -17,6 +17,8 @@ import '../../common.dart';
 import '../../models/peer_model.dart';
 import '../../models/platform_model.dart';
 import 'peer_card.dart';
+import 'gadesk_empty_state.dart';
+import 'gadesk_strings.dart';
 
 typedef PeerFilter = bool Function(Peer peer);
 typedef PeerCardBuilder = Widget Function(Peer peer);
@@ -187,6 +189,23 @@ class _PeersViewState extends State<_PeersView>
       child: Consumer<Peers>(builder: (context, peers, child) {
         if (peers.peers.isEmpty) {
           gFFI.peerTabModel.setCurrentTabCachedPeers([]);
+          if (appName == 'GADESK') {
+            final (title, description, icon) = switch (widget.peers.loadEvent) {
+              LoadEvent.favorite => ('No favorites yet',
+                  'Add a device to your favorites to find it here.', Icons.star_outline_rounded),
+              LoadEvent.lan => ('No devices discovered',
+                  'Devices discovered on your local network will appear here.', Icons.explore_outlined),
+              LoadEvent.addressBook => ('Your address book is empty',
+                  'Save devices in your personal address book to find them on your GADESK devices.', Icons.import_contacts_outlined),
+              _ => ('No recent connections',
+                  'When you connect to other devices, they will appear here.', Icons.schedule_rounded),
+            };
+            return GadeskEmptyState(
+              title: gadeskText(gadeskLanguage, title),
+              description: gadeskText(gadeskLanguage, description),
+              icon: icon,
+            );
+          }
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,

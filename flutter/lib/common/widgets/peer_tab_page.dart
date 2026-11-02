@@ -25,6 +25,8 @@ import 'package:url_launcher/url_launcher_string.dart';
 
 import '../../common.dart';
 import '../../models/platform_model.dart';
+import 'gadesk_surface.dart';
+import 'gadesk_strings.dart';
 
 class PeerTabPage extends StatefulWidget {
   const PeerTabPage({Key? key}) : super(key: key);
@@ -111,7 +113,7 @@ class _PeerTabPageState extends State<PeerTabPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Obx(() => SizedBox(
-              height: 32,
+              height: appName == 'GADESK' ? 52 : 32,
               child: Container(
                 padding: stateGlobal.isPortrait.isTrue
                     ? EdgeInsets.symmetric(horizontal: 2)
@@ -142,10 +144,14 @@ class _PeerTabPageState extends State<PeerTabPage>
         buildDefaultDragHandles: false,
         onReorder: model.reorder,
         scrollDirection: Axis.horizontal,
-        physics: NeverScrollableScrollPhysics(),
+        physics: appName == 'GADESK'
+            ? const ClampingScrollPhysics()
+            : const NeverScrollableScrollPhysics(),
         children: model.visibleEnabledOrderedIndexs.map((t) {
           final selected = model.currentTab == t;
-          final color = selected
+          final color = appName == 'GADESK'
+              ? (selected ? GadeskPalette.blue : GadeskPalette.of(context).muted)
+              : selected
               ? MyTheme.tabbar(context).selectedTextColor
               : MyTheme.tabbar(context).unSelectedTextColor
             ?..withOpacity(0.5);
@@ -154,6 +160,7 @@ class _PeerTabPageState extends State<PeerTabPage>
               color: Theme.of(context).colorScheme.background,
               borderRadius: BorderRadius.circular(6));
           final decoBorder = BoxDecoration(
+              color: appName == 'GADESK' ? GadeskPalette.blue.withOpacity(0.07) : null,
               border: Border(
             bottom: BorderSide(width: 2, color: color!),
           ));
@@ -170,8 +177,18 @@ class _PeerTabPageState extends State<PeerTabPage>
                         decoration: (hover.value
                             ? (selected ? decoBorder : deco)
                             : (selected ? decoBorder : null)),
-                        child: Icon(model.tabIcon(t), color: color)
-                            .paddingSymmetric(horizontal: 4),
+                        child: appName == 'GADESK' && (isDesktop || isWebDesktop)
+                            ? Row(mainAxisSize: MainAxisSize.min, children: [
+                                Icon(model.tabIcon(t), color: color, size: 21),
+                                const SizedBox(width: 8),
+                                Text(gadeskText(gadeskLanguage,
+                                    const ['Recents', 'Favorites', 'Discovery',
+                                      'Address book', 'Devices'][t]),
+                                    style: TextStyle(color: color, fontSize: 14,
+                                        fontWeight: selected ? FontWeight.w600 : FontWeight.normal)),
+                              ]).paddingSymmetric(horizontal: 12, vertical: 10)
+                            : Icon(model.tabIcon(t), color: color)
+                                .paddingSymmetric(horizontal: 4),
                       ).paddingSymmetric(horizontal: 4),
                       onTap: isOptionFixed(kOptionPeerTabIndex)
                           ? null

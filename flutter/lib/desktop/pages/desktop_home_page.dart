@@ -5,6 +5,9 @@ import 'dart:convert';
 import 'package:auto_size_text/auto_size_text.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter_hbb/common/widgets/gadesk_surface.dart';
+import 'package:flutter_hbb/desktop/widgets/gadesk_home_layout.dart';
 import 'package:flutter_hbb/common.dart';
 import 'package:flutter_hbb/common/widgets/animated_rotation_widget.dart';
 import 'package:flutter_hbb/common/widgets/custom_password.dart';
@@ -59,6 +62,14 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget build(BuildContext context) {
     super.build(context);
     final isIncomingOnly = bind.isIncomingOnly();
+    if (appName == 'GADESK' && !isIncomingOnly) {
+      return _buildBlock(
+        child: GadeskHomeLayout(
+          sidebar: _buildGadeskSidebar(context),
+          content: buildRightPane(context),
+        ),
+      );
+    }
     return _buildBlock(
         child: Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -73,6 +84,163 @@ class _DesktopHomePageState extends State<DesktopHomePage>
   Widget _buildBlock({required Widget child}) {
     return buildRemoteBlock(
         block: _block, mask: true, use: canBeBlocked, child: child);
+  }
+
+  Widget _buildGadeskSidebar(BuildContext context) {
+    final colors = GadeskPalette.of(context);
+    final outgoingOnly = bind.isOutgoingOnly();
+    return ChangeNotifierProvider.value(
+      value: gFFI.serverModel,
+      child: SingleChildScrollView(
+        controller: _leftPaneScrollController,
+        padding: const EdgeInsets.fromLTRB(20, 28, 20, 28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(children: [
+              SvgPicture.asset('assets/icon.svg', width: 48, height: 74),
+              const SizedBox(width: 14),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('GADESK',
+                          style: TextStyle(
+                              color: colors.text,
+                              fontSize: 30,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5)),
+                      const SizedBox(height: 2),
+                      Text('GRUPO AMAYO',
+                          style: TextStyle(color: colors.text, fontSize: 13)),
+                    ],
+                  ),
+                ),
+              ),
+            ]),
+            if (bind.isCustomClient())
+              Align(alignment: Alignment.centerLeft, child: loadPowered(context)),
+            const SizedBox(height: 20),
+            Divider(color: colors.border),
+            const SizedBox(height: 20),
+            if (!outgoingOnly) ...[
+              buildPresetPasswordWarning(),
+              Consumer<ServerModel>(builder: (context, model, _) {
+                final showOneTime = model.approveMode != 'click' &&
+                    model.verificationMethod != kUsePermanentPassword;
+                return GadeskSurface(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(children: [
+                        Icon(Icons.desktop_windows_outlined,
+                            size: 23, color: colors.muted),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(translate('Your Desktop'),
+                              style: TextStyle(
+                                  color: colors.text,
+                                  fontSize: 19,
+                                  fontWeight: FontWeight.w700)),
+                        ),
+                        if (!bind.isDisableSettings()) buildPopupMenu(context),
+                      ]),
+                      const SizedBox(height: 14),
+                      Text(translate('desk_tip'),
+                          style: TextStyle(
+                              color: colors.muted, fontSize: 13, height: 1.45)),
+                      const SizedBox(height: 20),
+                      _gadeskIdentityField(context,
+                          label: translate('ID'), controller: model.serverId),
+                      const SizedBox(height: 20),
+                      _gadeskIdentityField(context,
+                          label: translate('One-time Password'),
+                          controller: model.serverPasswd,
+                          canCopy: showOneTime,
+                          refresh: showOneTime
+                              ? () => bind.mainUpdateTemporaryPassword()
+                              : null),
+                      if (!bind.isDisableSettings())
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            onPressed: () => DesktopSettingPage.switch2page(
+                                SettingsTabKey.safety),
+                            icon: const Icon(Icons.key_outlined, size: 16),
+                            label: Text(translate('Change Password'),
+                                style: const TextStyle(fontSize: 11)),
+                          ),
+                        ),
+                    ],
+                  ),
+                );
+              }),
+            ] else
+              Text(translate('outgoing_only_desk_tip'),
+                  style: TextStyle(color: colors.muted, height: 1.5)),
+            Obx(() => buildHelpCards(stateGlobal.updateUrl.value)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _gadeskIdentityField(BuildContext context,
+      {required String label,
+      required TextEditingController controller,
+      bool canCopy = true,
+      VoidCallback? refresh}) {
+    final colors = GadeskPalette.of(context);
+    void copy() {
+      if (canCopy && controller.text.isNotEmpty) {
+        Clipboard.setData(ClipboardData(text: controller.text));
+        showToast(translate('Copied'));
+      }
+    }
+
+    return Container(
+      padding: const EdgeInsets.only(left: 11),
+      decoration: const BoxDecoration(
+          border: Border(left: BorderSide(color: GadeskPalette.turquoise, width: 3))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: TextStyle(color: colors.muted, fontSize: 12)),
+        const SizedBox(height: 4),
+        Row(children: [
+          Expanded(
+            child: GestureDetector(
+              onDoubleTap: copy,
+              child: TextFormField(
+                controller: controller,
+                readOnly: true,
+                decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 8)),
+                style: TextStyle(
+                    color: colors.text, fontSize: 20, fontWeight: FontWeight.w700),
+              ).workaroundFreezeLinuxMint(),
+            ),
+          ),
+          if (refresh != null)
+            IconButton(
+                tooltip: translate('Refresh Password'),
+                onPressed: refresh,
+                constraints: const BoxConstraints(minWidth: 30, minHeight: 36),
+                padding: const EdgeInsets.all(4),
+                icon: Icon(Icons.refresh_rounded, size: 20, color: colors.muted)),
+          IconButton(
+              tooltip: translate('Copy'),
+              onPressed: canCopy ? copy : null,
+              constraints: const BoxConstraints(minWidth: 30, minHeight: 36),
+              padding: const EdgeInsets.all(4),
+              icon: Icon(Icons.copy_outlined, size: 18, color: colors.muted)),
+        ]),
+      ]),
+    );
   }
 
   Widget buildLeftPane(BuildContext context) {
@@ -180,7 +348,9 @@ class _DesktopHomePageState extends State<DesktopHomePage>
 
   buildRightPane(BuildContext context) {
     return Container(
-      color: Theme.of(context).scaffoldBackgroundColor,
+      color: appName == 'GADESK'
+          ? GadeskPalette.of(context).background
+          : Theme.of(context).scaffoldBackgroundColor,
       child: ConnectionPage(),
     );
   }
@@ -599,6 +769,57 @@ class _DesktopHomePageState extends State<DesktopHomePage>
           isCardClosed = true;
         });
       }
+    }
+
+    if (appName == 'GADESK' && !bind.isIncomingOnly()) {
+      final colors = GadeskPalette.of(context);
+      return Padding(
+        padding: EdgeInsets.only(top: marginTop),
+        child: GadeskSurface(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (title.isNotEmpty)
+                Row(children: [
+                  Icon(title == 'Permissions'
+                      ? Icons.verified_user_outlined
+                      : Icons.info_outline, color: GadeskPalette.teal),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(translate(title),
+                      style: TextStyle(color: colors.text, fontSize: 18,
+                          fontWeight: FontWeight.w700))),
+                  if (closeButton == true)
+                    IconButton(onPressed: closeCard,
+                        tooltip: translate('Close'),
+                        icon: const Icon(Icons.close, size: 18)),
+                ]),
+              if (content.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(translate(content),
+                    style: TextStyle(color: colors.muted, height: 1.5, fontSize: 13)),
+              ],
+              if (btnText.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  onPressed: onPressed,
+                  icon: const Icon(Icons.open_in_new_rounded, size: 16),
+                  label: Text(translate(btnText)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: GadeskPalette.teal,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(0, 44),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+              if (help != null && link != null)
+                TextButton(onPressed: () => launchUrl(Uri.parse(link)),
+                    child: Text(translate(help))),
+            ],
+          ),
+        ),
+      );
     }
 
     return Stack(

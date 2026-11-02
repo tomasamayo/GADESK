@@ -6,6 +6,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_hbb/common/widgets/connection_page_title.dart';
+import 'package:flutter_hbb/common/widgets/gadesk_surface.dart';
+import 'package:flutter_hbb/desktop/widgets/gadesk_home_layout.dart';
 import 'package:flutter_hbb/consts.dart';
 import 'package:flutter_hbb/desktop/widgets/popup_menu.dart';
 import 'package:flutter_hbb/models/state_model.dart';
@@ -304,6 +306,17 @@ class _ConnectionPageState extends State<ConnectionPage>
   @override
   Widget build(BuildContext context) {
     final isOutgoingOnly = bind.isOutgoingOnly();
+    if (appName == 'GADESK') {
+      return GadeskConnectionLayout(
+        connectionCard: LayoutBuilder(builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 650 &&
+              MediaQuery.textScalerOf(context).scale(16) <= 24;
+          return _buildRemoteIDTextField(context, gadeskWide: wide);
+        }),
+        peers: const PeerTabPage(),
+        status: isOutgoingOnly ? null : const OnlineStatusWidget(),
+      );
+    }
     return Column(
       children: [
         Expanded(
@@ -342,17 +355,30 @@ class _ConnectionPageState extends State<ConnectionPage>
 
   /// UI for the remote ID TextField.
   /// Search for a peer.
-  Widget _buildRemoteIDTextField(BuildContext context) {
+  Widget _buildRemoteIDTextField(BuildContext context, {bool gadeskWide = false}) {
+    final isGadesk = appName == 'GADESK';
+    final colors = GadeskPalette.of(context);
     var w = Container(
-      width: 320 + 20 * 2,
+      width: isGadesk ? double.infinity : 320 + 20 * 2,
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
-      decoration: BoxDecoration(
+      decoration: isGadesk ? BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft, end: Alignment.bottomRight,
+            colors: [colors.surface, Color.alphaBlend(
+                GadeskPalette.turquoise.withOpacity(0.2), colors.surface)],
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: colors.border),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.035),
+              blurRadius: 24, offset: const Offset(0, 8))],
+      ) : BoxDecoration(
           borderRadius: const BorderRadius.all(Radius.circular(13)),
           border: Border.all(color: Theme.of(context).colorScheme.background)),
       child: Ink(
         child: Column(
           children: [
-            getConnectionPageTitle(context, false).marginOnly(bottom: 15),
+            (isGadesk ? _gadeskConnectionTitle(context)
+                : getConnectionPageTitle(context, false)).marginOnly(bottom: isGadesk ? 28 : 15),
             Row(
               children: [
                 Expanded(
@@ -429,6 +455,15 @@ class _ConnectionPageState extends State<ConnectionPage>
                               Theme.of(context).textTheme.titleLarge?.color,
                           decoration: InputDecoration(
                               filled: false,
+                              prefixIcon: isGadesk
+                                  ? Icon(Icons.desktop_windows_outlined, color: colors.muted, size: 22)
+                                  : null,
+                              border: isGadesk ? OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: colors.border)) : null,
+                              enabledBorder: isGadesk ? OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                  borderSide: BorderSide(color: colors.border)) : null,
                               counterText: '',
                               hintText: _idInputFocused.value
                                   ? null
@@ -513,9 +548,13 @@ class _ConnectionPageState extends State<ConnectionPage>
                     );
                   },
                 )),
+                if (isGadesk && gadeskWide) ...[
+                  const SizedBox(width: 18),
+                  _gadeskConnectActions(context),
+                ],
               ],
             ),
-            Padding(
+            if (!isGadesk) Padding(
               padding: const EdgeInsets.only(top: 13.0),
               child: Row(mainAxisAlignment: MainAxisAlignment.end, children: [
                 SizedBox(
@@ -616,11 +655,66 @@ class _ConnectionPageState extends State<ConnectionPage>
                 ),
               ]),
             ),
+            if (isGadesk && !gadeskWide) ...[
+              const SizedBox(height: 16),
+              Align(alignment: Alignment.centerRight,
+                  child: _gadeskConnectActions(context)),
+            ],
           ],
         ),
       ),
     );
     return Container(
-        constraints: const BoxConstraints(maxWidth: 600), child: w);
+        constraints: isGadesk ? const BoxConstraints()
+            : const BoxConstraints(maxWidth: 600), child: w);
+  }
+
+  Widget _gadeskConnectionTitle(BuildContext context) {
+    final colors = GadeskPalette.of(context);
+    return Row(children: [
+      Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: GadeskPalette.turquoise.withOpacity(0.2),
+            borderRadius: BorderRadius.circular(16)),
+        child: const Icon(Icons.desktop_windows_outlined,
+            size: 28, color: GadeskPalette.teal),
+      ),
+      const SizedBox(width: 16),
+      Expanded(child: Text(translate('Control Remote Desktop'),
+          style: TextStyle(color: colors.text, fontSize: 24,
+              fontWeight: FontWeight.w700))),
+      const SizedBox(width: 8),
+      Tooltip(message: translate('id_input_tip'),
+          child: Icon(Icons.info_outline_rounded, color: colors.muted, size: 22)),
+    ]);
+  }
+
+  Widget _gadeskConnectActions(BuildContext context) {
+    final colors = GadeskPalette.of(context);
+    return GadeskConnectActions(
+      label: translate('Connect'),
+      onConnect: () => onConnect(),
+      menu: Container(
+        decoration: BoxDecoration(color: colors.surface,
+            border: Border.all(color: colors.border),
+            borderRadius: BorderRadius.circular(14)),
+        child: PopupMenuButton<VoidCallback>(
+          tooltip: translate('More'),
+          onSelected: (action) => action(),
+          padding: const EdgeInsets.all(13),
+          icon: Icon(Icons.expand_more_rounded, color: colors.text),
+          itemBuilder: (_) => [
+            PopupMenuItem(value: () => onConnect(isFileTransfer: true),
+                child: Text(translate('Transfer file'))),
+            PopupMenuItem(value: () => onConnect(isViewCamera: true),
+                child: Text(translate('View camera'))),
+            PopupMenuItem(value: () => onConnect(isTerminal: true),
+                child: Text('${translate('Terminal')} (beta)')),
+            if (isDesktop) PopupMenuItem(value: () => onConnect(isTcpTunneling: true),
+                child: Text(translate('TCP tunneling'))),
+          ],
+        ),
+      ),
+    );
   }
 }
