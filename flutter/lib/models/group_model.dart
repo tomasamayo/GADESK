@@ -62,6 +62,12 @@ class GroupModel {
   }
 
   Future<void> _pull() async {
+    if (appName == 'GADESK') {
+      deviceGroups.clear();
+      users.clear();
+      peers.clear();
+      return;
+    }
     List<DeviceGroupPayload> tmpDeviceGroups = List.empty(growable: true);
     if (!await _getDeviceGroups(tmpDeviceGroups)) {
       // old hbbs doesn't support this api

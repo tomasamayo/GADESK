@@ -4190,6 +4190,11 @@ List<String> getPrinterNames() {
 }
 
 String _appName = '';
+String get gadeskLanguage {
+  final preference = bind.mainGetLocalOption(key: kCommConfKeyLang);
+  return preference.isEmpty || preference == 'default' ? localeName : preference;
+}
+
 String get appName {
   if (_appName.isEmpty) {
     _appName = bind.mainGetAppNameSync();

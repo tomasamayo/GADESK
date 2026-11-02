@@ -8,6 +8,8 @@ import 'package:flutter_hbb/models/state_model.dart';
 import 'package:get/get.dart';
 
 import '../../common.dart';
+import 'gadesk_empty_state.dart';
+import 'gadesk_strings.dart';
 
 class MyGroup extends StatefulWidget {
   final EdgeInsets? menuPadding;
@@ -29,6 +31,14 @@ class _MyGroupState extends State<MyGroup> {
 
   @override
   Widget build(BuildContext context) {
+    if (appName == 'GADESK') {
+      return GadeskEmptyState(
+        title: gadeskText(gadeskLanguage, 'Devices'),
+        description: gadeskText(gadeskLanguage,
+            'This is a personal account. Save your devices in the address book.'),
+        icon: Icons.devices_rounded,
+      );
+    }
     return Obx(() {
       if (!gFFI.userModel.isLogin) {
         return Center(

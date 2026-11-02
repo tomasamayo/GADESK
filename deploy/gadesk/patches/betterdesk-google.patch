@@ -1,9 +1,162 @@
+diff --git a/betterdesk-server/api/client_api_handlers.go b/betterdesk-server/api/client_api_handlers.go
+index ea1bdf1..43373dd 100644
+--- a/betterdesk-server/api/client_api_handlers.go
++++ b/betterdesk-server/api/client_api_handlers.go
+@@ -366,7 +366,9 @@ func (s *Server) handleClientCurrentUser(w http.ResponseWriter, r *http.Request)
+ 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "Not authenticated"})
+ 		return
+ 	}
+-	writeJSON(w, http.StatusOK, rustdeskUserPayload(username, role))
++	payload := rustdeskUserPayload(username, role)
++	s.applyGoogleProfile(payload, username)
++	writeJSON(w, http.StatusOK, payload)
+ }
+ 
+ type clientAbPostBody struct {
+diff --git a/betterdesk-server/api/client_google_profile.go b/betterdesk-server/api/client_google_profile.go
+new file mode 100644
+index 0000000..9887b1e
+--- /dev/null
++++ b/betterdesk-server/api/client_google_profile.go
+@@ -0,0 +1,59 @@
++package api
++
++import (
++	"encoding/json"
++	"net/url"
++	"strings"
++
++	"github.com/unitronix/betterdesk-server/auth"
++	"github.com/unitronix/betterdesk-server/db"
++)
++
++type googleClientProfile struct {
++	Username string `json:"username"`
++	Name     string `json:"name"`
++	Email    string `json:"email"`
++	Avatar   string `json:"avatar"`
++}
++
++func googleProfileKey(username string) string {
++	return "gadesk.google.profile." + username
++}
++
++func (s *Server) saveGoogleProfile(user *db.User, result *auth.OIDCResult, cfg *auth.OIDCConfig) error {
++	if cfg == nil || !auth.IsGoogleIssuer(cfg.IssuerURL) {
++		return nil
++	}
++	p := googleClientProfile{Username: user.Username, Name: result.DisplayName, Email: result.Email}
++	if u, err := url.Parse(result.Avatar); err == nil && u.Scheme == "https" && u.User == nil && u.Port() == "" && strings.HasSuffix(u.Hostname(), ".googleusercontent.com") {
++		p.Avatar = u.String()
++	}
++	data, err := json.Marshal(p)
++	if err != nil {
++		return err
++	}
++	return s.db.SetConfig(googleProfileKey(user.Username), string(data))
++}
++
++func (s *Server) applyGoogleProfile(payload map[string]any, username string) {
++	if !strings.HasPrefix(username, "google:") || s.db == nil {
++		return
++	}
++	user, err := s.db.GetUser(username)
++	if err != nil || user == nil || user.AuthProvider != db.AuthProviderOIDC {
++		return
++	}
++	raw, err := s.db.GetConfig(googleProfileKey(username))
++	if err != nil {
++		return
++	}
++	var p googleClientProfile
++	if json.Unmarshal([]byte(raw), &p) != nil || p.Username != username {
++		return
++	}
++	if p.Name != "" {
++		payload["display_name"] = p.Name
++	}
++	payload["email"] = p.Email
++	payload["avatar"] = p.Avatar
++}
+diff --git a/betterdesk-server/api/client_google_profile_test.go b/betterdesk-server/api/client_google_profile_test.go
+new file mode 100644
+index 0000000..a80a352
+--- /dev/null
++++ b/betterdesk-server/api/client_google_profile_test.go
+@@ -0,0 +1,48 @@
++package api
++
++import (
++	"encoding/json"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++
++	"github.com/unitronix/betterdesk-server/auth"
++)
++
++func TestGoogleProfileSurvivesSessionRefreshAndStaysPersonal(t *testing.T) {
++	database := testSetupDB(t)
++	defer database.Close()
++	s := &Server{db: database}
++	cfg := &auth.OIDCConfig{IssuerURL: "https://accounts.google.com", AllowSignup: true}
++	for _, name := range []string{"Alice", "Bob"} {
++		avatar := "https://lh3.googleusercontent.com/fixture"
++		if name == "Bob" {
++			avatar = "https://untrusted.example/avatar"
++		}
++		_, code := s.ensureOIDCUser(&auth.OIDCResult{Username: "google:" + name, Role: auth.RolePro, DisplayName: name, Email: name + "@example.com", Avatar: avatar}, cfg)
++		if code != "" {
++			t.Fatal(code)
++		}
++	}
++	// A new server instance must read the profile from the private database.
++	s = &Server{db: database}
++	for _, name := range []string{"Alice", "Bob"} {
++		r := withClientUser(httptest.NewRequest(http.MethodGet, "/api/currentUser", nil), "google:"+name, auth.RolePro)
++		w := httptest.NewRecorder()
++		s.handleClientCurrentUser(w, r)
++		var got map[string]any
++		if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
++			t.Fatal(err)
++		}
++		wantAvatar := "https://lh3.googleusercontent.com/fixture"
++		if name == "Bob" {
++			wantAvatar = ""
++		}
++		if got["avatar"] != wantAvatar {
++			t.Fatalf("unexpected avatar: %v", got["avatar"])
++		}
++		if got["display_name"] != name || got["email"] != name+"@example.com" || got["name"] != "google:"+name {
++			t.Fatalf("profile mismatch: %#v", got)
++		}
++	}
++}
 diff --git a/betterdesk-server/api/client_oidc_handlers.go b/betterdesk-server/api/client_oidc_handlers.go
-index 2465266..99a42d7 100644
+index 2465266..75cadc9 100644
 --- a/betterdesk-server/api/client_oidc_handlers.go
 +++ b/betterdesk-server/api/client_oidc_handlers.go
-@@ -197,6 +197,9 @@ func (s *Server) ensureOIDCUser(result *auth.OIDCResult, cfg *auth.OIDCConfig) (
+@@ -137,10 +137,12 @@ func (s *Server) handleClientOIDCAuthQuery(w http.ResponseWriter, r *http.Reques
+ 		})
+ 	}
+ 
++	payload := rustdeskUserPayload(user.Username, user.Role)
++	s.applyGoogleProfile(payload, user.Username)
+ 	writeJSON(w, http.StatusOK, map[string]any{
+ 		"type":         "access_token",
+ 		"access_token": token,
+-		"user":         rustdeskUserPayload(user.Username, user.Role),
++		"user":         payload,
+ 	})
+ }
+ 
+@@ -195,8 +197,14 @@ func (s *Server) ensureOIDCUser(result *auth.OIDCResult, cfg *auth.OIDCConfig) (
+ 			return nil, "oidc_error"
+ 		}
  		log.Printf("[OIDC] Auto-provisioned user %s with role %s", result.Username, role)
++		if err := s.saveGoogleProfile(user, result, cfg); err != nil {
++			return nil, "oidc_error"
++		}
  		return user, ""
  	}
 +	if cfg != nil && auth.IsGoogleIssuer(cfg.IssuerURL) && user.AuthProvider != db.AuthProviderOIDC {
@@ -12,6 +165,16 @@ index 2465266..99a42d7 100644
  
  	changed := false
  	// A group mapping is an explicit IdP authorization decision. The default
+@@ -214,6 +222,9 @@ func (s *Server) ensureOIDCUser(result *auth.OIDCResult, cfg *auth.OIDCConfig) (
+ 	if changed {
+ 		_ = s.db.UpdateUser(user)
+ 	}
++	if err := s.saveGoogleProfile(user, result, cfg); err != nil {
++		return nil, "oidc_error"
++	}
+ 	return user, ""
+ }
+ 
 diff --git a/betterdesk-server/api/client_oidc_handlers_test.go b/betterdesk-server/api/client_oidc_handlers_test.go
 index 9cfd9f2..6fcfd8c 100644
 --- a/betterdesk-server/api/client_oidc_handlers_test.go
@@ -85,10 +248,18 @@ index 9cfd9f2..6fcfd8c 100644
 +	}
 +}
 diff --git a/betterdesk-server/auth/oidc.go b/betterdesk-server/auth/oidc.go
-index 9577609..67fabfd 100644
+index 9577609..52adbf5 100644
 --- a/betterdesk-server/auth/oidc.go
 +++ b/betterdesk-server/auth/oidc.go
-@@ -542,6 +542,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -65,6 +65,7 @@ type OIDCResult struct {
+ 	Authenticated bool
+ 	Username      string
+ 	DisplayName   string
++	Avatar        string
+ 	Email         string
+ 	Role          string
+ 	RoleFromGroup bool
+@@ -542,6 +543,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	}
  
  	if resp.StatusCode != http.StatusOK {
@@ -98,7 +269,7 @@ index 9577609..67fabfd 100644
  		return nil, fmt.Errorf("token endpoint returned %d: %s", resp.StatusCode, string(body))
  	}
  
-@@ -572,6 +575,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -572,6 +576,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	// Fetch userinfo for additional claims
  	userinfoClaims, err := p.fetchUserInfo(ctx, tokenResp.AccessToken)
  	if err != nil {
@@ -108,7 +279,7 @@ index 9577609..67fabfd 100644
  		log.Printf("[OIDC] UserInfo fetch failed (non-fatal): %v", err)
  	} else {
  		// Merge userinfo claims (userinfo takes precedence)
-@@ -579,6 +585,12 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -579,6 +586,12 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  			claims[k] = v
  		}
  	}
@@ -121,17 +292,18 @@ index 9577609..67fabfd 100644
  
  	// Map claims to result
  	result := &OIDCResult{
-@@ -604,6 +616,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -604,6 +617,10 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	}
  
  	result.Username = getStringClaim(claims, claimUsername)
 +	if IsGoogleIssuer(cfg.IssuerURL) {
 +		result.Username = getStringClaim(claims, "gadesk_username")
++		result.Avatar = getStringClaim(claims, "picture")
 +	}
  	result.Email = getStringClaim(claims, claimEmail)
  	result.DisplayName = getStringClaim(claims, claimName)
  	result.Groups = getStringSliceClaim(claims, claimGroups)
-@@ -627,6 +642,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
+@@ -627,6 +644,9 @@ func (p *OIDCProvider) ExchangeCode(ctx context.Context, code, state string) (*O
  	// Map groups to role. The source flag lets provisioning distinguish an
  	// explicit group mapping from the configured fallback role.
  	result.Role, result.RoleFromGroup = p.resolveRoleWithSource(result.Groups)

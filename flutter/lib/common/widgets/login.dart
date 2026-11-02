@@ -13,6 +13,8 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../common.dart';
 import './dialog.dart';
 import './oidc_auth_status.dart';
+import './gadesk_account_panel.dart';
+import './gadesk_strings.dart';
 
 const kOpSvgList = [
   'github',
@@ -110,6 +112,7 @@ class ButtonOP extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final branding = _oidcProviderBranding(op);
+    final isGadeskGoogle = appName == 'GADESK' && op.toLowerCase() == 'google';
     final buttonLabel = translate("Continue with {${branding.label}}");
     return Row(children: [
       Container(
@@ -117,7 +120,11 @@ class ButtonOP extends StatelessWidget {
         width: 200,
         child: Obx(() => ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: primaryColor,
+              backgroundColor: isGadeskGoogle ? Colors.white : primaryColor,
+              foregroundColor: isGadeskGoogle ? const Color(0xff1f1f1f) : null,
+              side: isGadeskGoogle
+                  ? const BorderSide(color: Color(0xff747775))
+                  : null,
             ).copyWith(elevation: ButtonStyleButton.allOrNull(0.0)),
             onPressed:
                 curOP.value == 'rustdesk' || !canStartAuth() ? null : onTap,
@@ -471,7 +478,7 @@ class _WidgetOPState extends State<WidgetOP> {
           curOP: widget.curOP,
           icon: widget.config.icon,
           primaryColor: str2color(widget.config.op, 0x7f),
-          height: 36,
+          height: appName == 'GADESK' ? 44 : 36,
           canStartAuth: widget.canStartAuth,
           onTap: () async {
             if (!widget.canStartAuth()) {
@@ -720,11 +727,15 @@ Future<bool?> _openLoginDialogOnce() async {
 }
 
 Future<bool?> _openLoginDialog() async {
+  final isGadesk = appName == 'GADESK';
   var username =
       TextEditingController(text: UserModel.getLocalUserInfo()?['name'] ?? '');
   var password = TextEditingController();
-  final userFocusNode = FocusNode()..requestFocus();
-  Timer(Duration(milliseconds: 100), () => userFocusNode..requestFocus());
+  final userFocusNode = FocusNode();
+  if (!isGadesk) {
+    userFocusNode.requestFocus();
+    Timer(Duration(milliseconds: 100), () => userFocusNode.requestFocus());
+  }
 
   String? usernameMsg;
   String? passwordMsg;
@@ -856,9 +867,49 @@ Future<bool?> _openLoginDialog() async {
       setState(() => isInProgress = false);
     }
 
+    providerButtons(List<dynamic> providers) => LoginWidgetOP(
+          ops: providers
+              .map((e) => ConfigOP(op: e['name'], icon: e['icon']))
+              .toList(),
+          curOP: curOP,
+          startAuth: oidcAuth.start,
+          cancelAuth: oidcAuth.cancelCurrent,
+          canStartAuth: oidcAuth.canStart,
+          cbLogin: (Map<String, dynamic> authBody) async {
+            LoginResponse? resp;
+            try {
+              resp = gFFI.userModel.getLoginResponseFromAuthBody(authBody);
+            } catch (_) {
+              debugPrint('Failed to parse OIDC login response');
+            }
+            if (resp != null) {
+              close(true);
+              handleLoginResponse(resp, false, null);
+            }
+          },
+        );
+
     thirdAuthWidget() => Obx(() {
           final error = loginOptionsError.value;
           final inProgress = loginOptionsInProgress.value;
+          if (isGadesk) {
+            final providers = loginOptions
+                .where((e) => (e['name'] as String).toLowerCase() == 'google')
+                .toList();
+            final language = gadeskLanguage;
+            return GadeskAccountPanel(
+              language: language,
+              loading: inProgress,
+              errorMessage: error == null
+                  ? null
+                  : gadeskText(language,
+                      'We could not reach the account service. Check your connection and try again.'),
+              providerButton: error == null && providers.isNotEmpty
+                  ? providerButtons(providers)
+                  : null,
+              onRetry: fetchLoginOptions,
+            );
+          }
           if (error != null) {
             return Column(
               children: [
@@ -968,14 +1019,16 @@ Future<bool?> _openLoginDialog() async {
     return CustomAlertDialog(
       title: title,
       titlePadding: titlePadding,
-      contentBoxConstraints: BoxConstraints(minWidth: 400),
+      contentBoxConstraints: isGadesk
+          ? const BoxConstraints(maxWidth: 440)
+          : const BoxConstraints(minWidth: 400),
       content: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           const SizedBox(
             height: 8.0,
           ),
-          LoginWidgetUserPass(
+          if (!isGadesk) LoginWidgetUserPass(
             username: username,
             pass: password,
             usernameMsg: usernameMsg,
@@ -989,7 +1042,7 @@ Future<bool?> _openLoginDialog() async {
         ],
       ),
       onCancel: onDialogCancel,
-      onSubmit: onLogin,
+      onSubmit: isGadesk ? null : onLogin,
     );
   }).whenComplete(oidcAuth.close);
 

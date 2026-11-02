@@ -6,7 +6,7 @@ Estado: integración en preparación; el registro público todavía no está act
 
 Base BetterDesk: `eb84feff61c25595e326294fccd13e27ccd14a29`.
 Parche: `patches/betterdesk-google.patch`.
-SHA-256: `14538850a2da3bbb9b57b21538388f4635ba274813f67ae1952e2a4e065b67f2`.
+SHA-256: `9d04483a4961275c16765fe1efdae00b9f1ecd61a1f9a3faef7e78569cd3a75d`.
 Licencia original: `third-party/BetterDesk-LICENSE` (AGPL-3.0).
 El parche añade la biblioteca de verificación `github.com/coreos/go-oidc/v3`
 fijada a v3.21.0, con sus dependencias y sumas. No se implementa criptografía
@@ -26,6 +26,10 @@ Para Google se comprueban firma RS256/JWKS, emisor, audiencia, caducidad, nonce,
 state de un uso y coincidencia de sub con UserInfo. Se requiere correo verificado.
 La identidad es `google:<sub>`, independiente del correo o nombre. Las altas
 usarán el rol limitado `pro`; no se vinculan automáticamente cuentas locales.
+El nombre, correo y foto verificados se conservan bajo claves de perfil Google
+en la base privada y se devuelven sólo al titular autenticado. Las fotos se
+limitan a URLs HTTPS de googleusercontent.com. Al atender una solicitud de
+eliminación de cuenta debe eliminarse también su clave `gadesk.google.profile.google:<sub>`.
 Los otros proveedores del backend conservan su comportamiento previo.
 
 ## Configuración del propietario
@@ -91,7 +95,9 @@ el backend después y verificar el inicio de sesión antes de anunciarlo.
 
 ## Entorno de pruebas (1 de noviembre de 2026)
 
-La imagen parcheada compiló en el VPS como `gadesk-google-stage:14538850`.
+La primera versión del parche compiló en el VPS como `gadesk-google-stage:14538850`.
+La ampliación de perfiles (SHA actual arriba) pasó la suite Go completa local;
+su nueva imagen y las comprobaciones HTTP se validarán antes de desplegar.
 Un backend separado con base/clave nuevas y un nginx separado completaron 26
 comprobaciones HTTP reales: opciones, métodos, sesión bearer, rutas
 administrativas privadas y dos libretas independientes. El límite de inicio
